@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binary Tree Visualization</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: white;  /* Optional: set background color */
+            display: flex;
+            flex-direction: column;  /* Stack items vertically */
+            align-items: center;  /* Center only the plot container */
+        }
+        h1 {
+            margin: 20px 0;  /* Space above and below the heading */
+        }
+        .plot-container {
+            width: 80%;  /* Set a width for the container */
+            max-width: 800px;  /* Optional: limit maximum width */
+            height: auto;  /* Allow height to adjust automatically */
+            display: flex;
+            justify-content: center;  /* Center the plot inside this container */
+        }
+    </style>
+</head>
+<body>
+    <h1>3D Binary Tree Visualization v0.1</h1>  <!-- Headline remains as it was -->
+    <div class="plot-container">
+        {{ plot|safe }}
+    </div>
+</body>
+</html>
