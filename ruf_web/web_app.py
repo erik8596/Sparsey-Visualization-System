@@ -7,48 +7,44 @@ app = Flask(__name__)
 
 @app.route('/')
 def index():
+
     # Create a binary tree
     nr_vertices = 25
     v_label = list(map(str, range(nr_vertices)))
-    G = Graph.Tree(nr_vertices, 2)  # 2 stands for number of children
+    G = Graph.Tree(nr_vertices, 2)  # 2 stands for children number
 
-    # Get layout for a tree
-    lay = G.layout('rt')
+    # Generate layout using spring layout for clustering
+    spring_layout = G.layout('fr')  # Fruchterman-Reingold layout
 
     # Prepare positions
-    position = {k: lay[k] for k in range(nr_vertices)}
-    Y = [lay[k][1] for k in range(nr_vertices)]
-    
-    # Extract edges
-    es = EdgeSeq(G)  # sequence of edges
-    E = [e.tuple for e in G.es]  # list of edges
+    position = {k: spring_layout[k] for k in range(nr_vertices)}
 
     # Prepare coordinates for nodes and edges
-    L = len(position)
-    Xn, Yn, Zn = [], [], []
+    Xn = []
+    Yn = []
+    Zn = []
 
-    # Create spacing for conical shape
-    for k in range(L):
-        # Use vertex index directly
-        depth = k
-        level = int(np.floor(np.log2(depth + 1))) if depth > 0 else 0
-        angle = (depth % (2 ** level)) * (360 / (2 ** level))
+    # Create spacing for cone shape
+    for k in range(nr_vertices):
+        # Calculate level for conical effect
+        level = int(np.floor(np.log2(k + 1))) if k > 0 else 0
+        z = -level * 2  # Negative for a downward tree
 
-        # Calculate x and y based on the level and angle
-        x = level * np.cos(np.radians(angle)) * 1.5  # Scale for spacing
-        y = level * np.sin(np.radians(angle)) * 1.5
-        z = -depth * 1  # Negative for a downward tree
+        # Spread nodes horizontally based on spring layout
+        x = position[k][0]
+        y = position[k][1]
 
         Xn.append(x)
         Yn.append(y)
         Zn.append(z)
 
-    Xe, Ye, Ze = [], [], []  # Edge coordinates
-    for edge in E:
-        # Calculate edge coordinates with conical effect
-        Xe += [Xn[edge[0]], Xn[edge[1]], None]
-        Ye += [Yn[edge[0]], Yn[edge[1]], None]
-        Ze += [Zn[edge[0]], Zn[edge[1]], None]  # Use z-coordinates for edges
+    Xe = []
+    Ye = []
+    Ze = []  # z-coordinate for edges
+    for edge in G.es:
+        Xe += [Xn[edge.source], Xn[edge.target], None]
+        Ye += [Yn[edge.source], Yn[edge.target], None]
+        Ze += [Zn[edge.source], Zn[edge.target], None]  # Use z-coordinates for edges
 
     # Create Plotly Figure
     fig = go.Figure()
@@ -59,8 +55,9 @@ def index():
         y=Ye,
         z=Ze,
         mode='lines',
-        line=dict(color='rgb(210,210,210)', width=1),
-        hoverinfo='none'
+        line=dict(color='rgb(0,0,0)', width=1),
+        hoverinfo='none',
+        showlegend=False
     ))
 
     # Add nodes
@@ -71,30 +68,57 @@ def index():
         mode='markers',
         name='Nodes',
         marker=dict(
-            symbol='circle',
+            symbol='circle',  # Valid symbol
             size=8,
             color='#0066cc',
             line=dict(color='rgb(50,50,50)', width=1)
         ),
         text=v_label,
         hoverinfo='text',
-        opacity=0.8
+        opacity=1,
+        showlegend=False
     ))
 
-    # Layout settings for 3D visualization
+
+    # # Layout settings for 3D visualization
+
+    # Update plot sizing
     fig.update_layout(
-        title='3D Conical Binary Tree Visualization',
-        scene=dict(
-            xaxis=dict(title='X'),
-            yaxis=dict(title='Y'),
-            zaxis=dict(title='Depth'),
-            bgcolor='white',  # Set background color to white
-            aspectmode='manual',
-            aspectratio=dict(x=1, y=1, z=1)  # Adjust for better view
+    title='3D Conical Binary Tree Visualization',
+    scene=dict(
+        xaxis=dict(
+            title='X',
+            showgrid=False,
+            zeroline=False,
+            visible=False  # Hide the x-axis
         ),
+        yaxis=dict(
+            title='Y',
+            showgrid=False,
+            zeroline=False,
+            visible=False  # Hide the y-axis
+        ),
+        zaxis=dict(
+            title='Depth',
+            showgrid=False,
+            zeroline=False,
+            visible=False  # Hide the z-axis
+        ),
+        bgcolor='white',  # Set background color to white
+        aspectmode='manual',
+        aspectratio=dict(x=1, y=1, z=1),  # Adjust for better view
+    ),
+        template="simple_white",
         showlegend=False,
-        width=800,
-        height=800
+        width=1000,
+        height=800,
+        margin=dict(l=50, r=50, b=50, t=50)
+    )
+
+    # Update 3D scene options
+    fig.update_scenes(
+        aspectratio=dict(x=1, y=1, z=0.7),
+        # aspectmode="manual"
     )
 
     plot_html = fig.to_html(full_html=True)
