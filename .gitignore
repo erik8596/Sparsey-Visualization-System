@@ -1,6 +1,7 @@
 # virtual environments
 .venv480ruf/
 .venv_ruf/
+.venv/
 
 # python cache files
 ruf_web/__pycache__/
