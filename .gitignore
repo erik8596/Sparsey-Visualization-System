@@ -5,3 +5,6 @@
 
 # python cache files
 ruf_web/__pycache__/
+
+# vs code 
+.vscode/
