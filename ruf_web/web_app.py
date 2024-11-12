@@ -10,8 +10,8 @@ app = Flask(__name__)
 @app.route('/')
 def index():
 
-    # fig = binaryTreeVisual()
-    fig = neuralNetVisual()
+    fig = binaryTreeVisual()
+    # fig = neuralNetVisual()
 
     plot_html = fig.to_html(full_html=True)
 
