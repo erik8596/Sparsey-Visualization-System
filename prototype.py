@@ -2,8 +2,17 @@ import plotly.graph_objects as go
 import numpy as np
 import yaml
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+EXAMPLE_CONFIG_FILE_PATH = os.getenv('STS_EXAMPLE_EXP_CONFIG_FILE_PATH')
+
+print(EXAMPLE_CONFIG_FILE_PATH)
+
 # Load Sparsey model configurations from YAML file
-with open('/Users/erik/Desktop/SparseyTestingSystem/demo/example_configs/presentation_4_configs/network.yaml', 'r') as file:
+with open(EXAMPLE_CONFIG_FILE_PATH, 'r') as file:
     network_config = yaml.safe_load(file)
 
 # Extract key parameters from the network configuration

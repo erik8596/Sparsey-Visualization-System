@@ -8,3 +8,6 @@ ruf_web/__pycache__/
 
 # vs code 
 .vscode/
+
+# env
+.env
