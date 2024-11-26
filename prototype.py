@@ -38,15 +38,16 @@ def hex_grid(rows, cols, hex_size=1):
             mac_positions.append((x, y))
     return mac_positions
 
-# Function to generate the centers of competitive modules (CMs) within a MAC
-def cm_centers(center_x, center_y, size):
-    """Generate centers for competitive modules (CMs) within the parent MAC."""
-    angles = np.linspace(0, 2 * np.pi, 7, endpoint=False)
-    centers = [(center_x, center_y)]  # Center CM
-    for angle in angles:
-        x = center_x + size * np.cos(angle)
-        y = center_y + size * np.sin(angle)
-        centers.append((x, y))
+def cm_centers(center_x, center_y, size, num_cms):
+    """Generate centers for competitive modules (CMs) within the parent MAC, including a central CM."""
+    centers = [(center_x, center_y)]  # Central CM
+    # Generate the remaining (num_cms - 1) CMs around the center
+    if num_cms > 1:
+        angles = np.linspace(0, 2 * np.pi, num_cms - 1, endpoint=False)
+        for angle in angles:
+            x = center_x + size * np.cos(angle)
+            y = center_y + size * np.sin(angle)
+            centers.append((x, y))
     return centers
 
 # Function to generate vertices for a neuron
@@ -57,17 +58,20 @@ def neuron(center_x, center_y, radius, num_points=12):
     y = center_y + radius * np.sin(angles)
     return list(x), list(y)
 
-# Function to generate a smaller hexagonal grid for neurons within a CM
-def neuron_centers(center_x, center_y, radius):
-    """Generate 7 neuron centers in a small hexagonal pattern."""
-    size = 2 * radius + 0.01  # Distance between centers equals the diameter
-    angles = np.linspace(0, 2 * np.pi, 7, endpoint=False)
-    centers = [(center_x, center_y)]  # Center neuron
-    for angle in angles:
-        x = center_x + size * np.cos(angle)
-        y = center_y + size * np.sin(angle)
-        centers.append((x, y))
+# Function to generate neuron centers in a radial arrangement around a central neuron within a CM
+def neuron_centers(center_x, center_y, radius, num_neurons):
+    """Generate neuron centers in a radial arrangement, including a central neuron for spatial organization."""
+    centers = [(center_x, center_y)]  # Central neuron
+    # Generate the remaining (num_neurons - 1) neurons around the center
+    if num_neurons > 1:
+        size = 2 * radius + 0.01  # Distance between centers equals the diameter
+        angles = np.linspace(0, 2 * np.pi, num_neurons - 1, endpoint=False)
+        for angle in angles:
+            x = center_x + size * np.cos(angle)
+            y = center_y + size * np.sin(angle)
+            centers.append((x, y))
     return centers
+
 
 # Create the Plotly figure
 fig = go.Figure()
@@ -95,21 +99,21 @@ for layer in layers:
     mac_positions_layers.append((mac_positions, layer["z"]))
     for mac_x, mac_y in mac_positions:
         # Hexagon boundary representing the MAC
-        hex_x, hex_y = mac_boundary(mac_x, mac_y, size=layer["hex_size"])
+        mac_boundary_x, mac_boundary_y = mac_boundary(mac_x, mac_y, size=layer["hex_size"])
         fig.add_trace(go.Scatter3d(
-            x=hex_x, y=hex_y, z=[layer["z"]] * len(hex_x), mode='lines', name='MAC',
+            x=mac_boundary_x, y=mac_boundary_y, z=[layer["z"]] * len(mac_boundary_x), mode='lines', name='MAC',
             line=dict(color='blue')
         ))
 
         # Add competitive modules (CMs) within each MAC
-        cm_centers_positions = cm_centers(mac_x, mac_y, size=layer["hex_size"] * 0.5)
+        cm_centers_positions = cm_centers(mac_x, mac_y, size=layer["hex_size"] * 0.5, num_cms=layer["num_cms_per_mac"])
         combined_x = []
         combined_y = []
         combined_z = []
         for cm_x, cm_y in cm_centers_positions:
             # Generate neurons within each CM
             radius = layer["hex_size"] * 0.06  # Radius of the neurons
-            neuron_centers_positions = neuron_centers(cm_x, cm_y, radius)
+            neuron_centers_positions = neuron_centers(cm_x, cm_y, radius, num_neurons=layer["num_neurons_per_cm"])
             for neuron_x, neuron_y in neuron_centers_positions:
                 neuron_x_vals, neuron_y_vals = neuron(neuron_x, neuron_y, radius=radius)
                 combined_x.extend(neuron_x_vals + [None])  # Add None to separate each neuron
@@ -122,7 +126,7 @@ for layer in layers:
             y=combined_y,
             z=combined_z,
             mode='lines',  # Render as hollow 2D neurons
-            line=dict(color='black', width=2)  # Hollow neuron outline
+            line=dict(color='black', width=3)  # Hollow neuron outline
         ))
 
 # Add example connections
