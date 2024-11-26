@@ -5,6 +5,10 @@ import yaml
 import os
 from dotenv import load_dotenv
 
+# Import functions from visualize_input_layer.py
+from visualize_input_layer import load_sample_images, preprocess_images, get_input_layer_traces
+
+
 load_dotenv()
 
 EXAMPLE_CONFIG_FILE_PATH = os.getenv('STS_EXAMPLE_EXP_CONFIG_FILE_PATH')
@@ -12,7 +16,7 @@ EXAMPLE_CONFIG_FILE_PATH = os.getenv('STS_EXAMPLE_EXP_CONFIG_FILE_PATH')
 print(EXAMPLE_CONFIG_FILE_PATH)
 
 # Load Sparsey model configurations from YAML file
-with open(EXAMPLE_CONFIG_FILE_PATH, 'r') as file:
+with open('/Users/erik/Desktop/SparseyTestingSystem/demo/example_configs/presentation_4_configs/network.yaml', 'r') as file:
     network_config = yaml.safe_load(file)
 
 # Extract key parameters from the network configuration
@@ -112,7 +116,7 @@ for layer in layers:
         combined_z = []
         for cm_x, cm_y in cm_centers_positions:
             # Generate neurons within each CM
-            radius = layer["hex_size"] * 0.06  # Radius of the neurons
+            radius = layer["hex_size"] * 0.07  # Radius of the neurons
             neuron_centers_positions = neuron_centers(cm_x, cm_y, radius, num_neurons=layer["num_neurons_per_cm"])
             for neuron_x, neuron_y in neuron_centers_positions:
                 neuron_x_vals, neuron_y_vals = neuron(neuron_x, neuron_y, radius=radius)
@@ -169,6 +173,16 @@ for layer in layers:
 #             line=dict(color='red', width=2),
 #             name='BottomUp'
 #         ))
+
+# Finally, add the input layer visualization last to make it visible
+dataset_path = '/Users/erik/Desktop/SparseyTestingSystem/demo/sample_mnist_dataset'
+images, labels = load_sample_images(dataset_path)
+preprocessed_images = preprocess_images(images)
+
+# Generate input layer traces and add them to the figure
+input_layer_traces = get_input_layer_traces(preprocessed_images, z_position_input=-5)
+for trace in input_layer_traces:
+    fig.add_trace(trace)
 
 # Customize 3D layout for panning and rotating
 fig.update_layout(
