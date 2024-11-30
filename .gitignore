@@ -6,5 +6,11 @@
 # python cache files
 ruf_web/__pycache__/
 
+# pycache
+__pycache__/
+
+# module init files
+__init__.py
+
 # vs code 
 .vscode/
