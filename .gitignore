@@ -14,3 +14,9 @@ __init__.py
 
 # vs code 
 .vscode/
+
+# environment variables
+.env
+
+# wandb
+wandb/
