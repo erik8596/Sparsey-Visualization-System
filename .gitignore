@@ -4,10 +4,11 @@
 .venv/
 
 # python cache files
-ruf_web/__pycache__/
+__pycache__/
 
 # vs code 
 .vscode/
 
 # env
 .env
+.DS_Store
