@@ -2,11 +2,12 @@
 .venv480ruf/
 .venv_ruf/
 .venv/
+venv/
 
 # python cache files
 __pycache__/
 
-# vs code 
+# vs code
 .vscode/
 
 # env
