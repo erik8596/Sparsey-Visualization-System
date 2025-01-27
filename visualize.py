@@ -68,7 +68,7 @@ from render_manager import RenderManager
 from grid_utils import hex_grid, cm_centers, neuron_centers
 
 # Path to the directory containing network models
-NETWORK_CONFIGS_DIR = "/Users/erik/Desktop/SparseyTestingSystem/demo/example_configs/presentation_configs"
+NETWORK_CONFIGS_DIR = "/home/ryumakiguchi/code/ryumakiguchi/Sparsey/SparseyTestingSystem/demo/example_configs/presentation_4_configs"
 
 # Initialize Dash app
 app = dash.Dash(__name__)
@@ -79,7 +79,7 @@ parsed_network_config = None
 # Layout for Dash app
 app.layout = html.Div([
     html.H1("Sparsey Visualization System"),
-    
+
     # Dropdown to select the YAML configuration
     html.Label("Select Network Configuration:"),
     dcc.Dropdown(
@@ -94,7 +94,7 @@ app.layout = html.Div([
 
     # Graph to display the visualization
     dcc.Graph(id='sparsey-visualization', style={'height': '80vh'}),
-    
+
     # Status message
     html.Div(id='status-message', style={'marginTop': '20px', 'color': 'green'})
 ])
