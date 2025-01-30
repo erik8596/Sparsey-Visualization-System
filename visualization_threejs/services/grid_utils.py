@@ -1,3 +1,5 @@
+# services/grid_utils.py
+
 import numpy as np
 
 def hex_grid(rows, cols, hex_size=1.5):
@@ -18,6 +20,7 @@ def hex_grid(rows, cols, hex_size=1.5):
 
     return np.stack([x_positions.ravel(), y_positions.ravel()], axis=1)
 
+
 def cm_centers(center_x, center_y, size, num_cms):
     """Generate centers for CMs within a MAC."""
     if num_cms == 1:
@@ -26,6 +29,7 @@ def cm_centers(center_x, center_y, size, num_cms):
     offsets = np.stack([np.cos(angles), np.sin(angles)]) * size
     centers = np.array([center_x, center_y])[:, None] + offsets
     return centers.T
+
 
 def neuron_centers(center_x, center_y, radius, num_neurons):
     """Generate neuron centers in a radial arrangement."""
