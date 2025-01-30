@@ -1,0 +1,115 @@
+Run ID: tex3jfof | Run Name: youthful-dream-2
+
+Config:
+model:
+layers: {'layer_1': {'name': 'sparsey', 'params': {'num_macs': 9, 'grid_layout': 'rect', 'sigmoid_chi': 2.5, 'sigmoid_phi': 5, 'autosize_grid': False, 'sigmoid_lambda': 28, 'min_familiarity': 0.2, 'num_cms_per_mac': 2, 'permanence_steps': 5, 'mac_grid_num_cols': 3, 'mac_grid_num_rows': 3, 'num_neurons_per_cm': 2, 'prev_layer_num_macs': 64, 'permanence_convexity': 0.5, 'saturation_threshold': 0.5, 'prev_layer_grid_layout': 'rect', 'activation_threshold_max': 1, 'activation_threshold_min': 0.2, 'mac_receptive_field_size': 0.6, 'prev_layer_num_cms_per_mac': 1, 'prev_layer_mac_grid_num_cols': 8, 'prev_layer_mac_grid_num_rows': 8, 'prev_layer_num_neurons_per_cm': 1}}, 'layer_2': {'name': 'sparsey', 'params': {'num_macs': 4, 'grid_layout': 'rect', 'sigmoid_chi': 1.5, 'sigmoid_phi': 5, 'autosize_grid': False, 'sigmoid_lambda': 28, 'min_familiarity': 0.2, 'num_cms_per_mac': 5, 'permanence_steps': 100, 'mac_grid_num_cols': 2, 'mac_grid_num_rows': 2, 'num_neurons_per_cm': 5, 'prev_layer_num_macs': 9, 'permanence_convexity': 0.5, 'saturation_threshold': 0.5, 'prev_layer_grid_layout': 'rect', 'activation_threshold_max': 1, 'activation_threshold_min': 0.2, 'mac_receptive_field_size': 1.5, 'prev_layer_num_cms_per_mac': 2, 'prev_layer_mac_grid_num_cols': 3, 'prev_layer_mac_grid_num_rows': 3, 'prev_layer_num_neurons_per_cm': 2}}}
+model_name: example_model_v2
+input_dimensions: {'width': 8, 'height': 8}
+model_description: The example model from network.yaml, but better!
+dataset:
+params: {'data_dir': './demo/sample_mnist_dataset', 'image_format': '.png'}
+in_memory: True
+description: 50-item test MNIST dataset
+load_lazily: False
+dataset_type: image
+preprocessed: True
+save_to_disk: True
+preprocessed_stack: {'transform_list': [{'name': 'resize', 'params': {'size': [8, 8], 'antialias': True}}, {'name': 'binarize', 'params': {'binarize_threshold': 0.5}}, {'name': 'skeletonize', 'params': {'sigma': 3}}]}
+preprocessed_temp_dir: datasets/preprocessed_dataset
+preprocessing:
+transform_list: [{'name': 'resize', 'params': {'size': [8, 8], 'antialias': True}}, {'name': 'to_dtype', 'params': {'dtype': 'float32', 'scale': True}}, {'name': 'sparsey_input_reshape', 'params': {}}]
+training_recipe:
+eval: {'dataloader': {'shuffle': True, 'batch_size': 16}}
+metrics: [{'name': 'basis_set_size', 'save': True, 'params': {}, 'reduction': 'none', 'best_value': 'max_by_layerwise_mean'}, {'name': 'basis_average', 'save': True, 'params': {}, 'reduction': 'none', 'best_value': 'max_by_layerwise_mean'}, {'name': 'num_activations', 'save': True, 'params': {}, 'reduction': 'layerwise_mean', 'best_value': 'min_by_layerwise_mean'}, {'name': 'feature_coverage', 'save': True, 'params': {}, 'reduction': 'none', 'best_value': 'max_by_layerwise_mean'}, {'name': 'match_accuracy', 'save': True, 'params': {}, 'reduction': None, 'best_value': 'max_by_layerwise_mean'}, {'name': 'num_activations', 'save': True, 'params': {}, 'reduction': None, 'best_value': 'min_by_layerwise_mean'}]
+use_gpu: False
+run_name: None
+training: {'dataloader': {'shuffle': True, 'batch_size': 1}, 'num_epochs': 1}
+optimizer: {'name': 'hebbian', 'params': {}}
+description: A test run with the demo configuration files.
+
+Summary:
+_runtime: 2.2004501819610596
+_step: 49
+_timestamp: 1733015897.1276631
+_wandb: {'runtime': 7}
+basis_average: 0.14394426345825195
+basis_average/layer_1: 0.10476352274417876
+basis_average/layer_1/mac_1: 0.07347074896097183
+basis_average/layer_1/mac_2: 0.11759869009256364
+basis_average/layer_1/mac_3: 0.07304687798023224
+basis_average/layer_1/mac_4: 0.11008522659540176
+basis_average/layer_1/mac_5: 0.20357142388820648
+basis_average/layer_1/mac_6: 0.109375
+basis_average/layer_1/mac_7: 0.07164634019136429
+basis_average/layer_1/mac_8: 0.11562500894069672
+basis_average/layer_1/mac_9: 0.0684523805975914
+basis_average/layer_2: 0.18312501907348633
+basis_average/layer_2/mac_1: 0.18312501907348633
+basis_average/layer_2/mac_2: 0.18312501907348633
+basis_average/layer_2/mac_3: 0.18312501907348633
+basis_average/layer_2/mac_4: 0.18312501907348633
+basis_set_size: 7.638888835906982
+basis_set_size/layer_1: 1.7777777910232544
+basis_set_size/layer_1/mac_1: 4
+basis_set_size/layer_1/mac_2: 2
+basis_set_size/layer_1/mac_3: 2
+basis_set_size/layer_1/mac_4: 2
+basis_set_size/layer_1/mac_5: 2
+basis_set_size/layer_1/mac_6: 1
+basis_set_size/layer_1/mac_7: 1
+basis_set_size/layer_1/mac_8: 1
+basis_set_size/layer_1/mac_9: 1
+basis_set_size/layer_2: 13.5
+basis_set_size/layer_2/mac_1: 21
+basis_set_size/layer_2/mac_2: 10
+basis_set_size/layer_2/mac_3: 15
+basis_set_size/layer_2/mac_4: 8
+feature_coverage: 0.7453703880310059
+feature_coverage/layer_1: 0.4907407760620117
+feature_coverage/layer_1/mac_1: 0.3333333432674408
+feature_coverage/layer_1/mac_2: 0.4166666567325592
+feature_coverage/layer_1/mac_3: 0.3333333432674408
+feature_coverage/layer_1/mac_4: 0.5
+feature_coverage/layer_1/mac_5: 1
+feature_coverage/layer_1/mac_6: 0.5
+feature_coverage/layer_1/mac_7: 0.4166666567325592
+feature_coverage/layer_1/mac_8: 0.5833333134651184
+feature_coverage/layer_1/mac_9: 0.3333333432674408
+feature_coverage/layer_2: 1
+feature_coverage/layer_2/mac_1: 1
+feature_coverage/layer_2/mac_2: 1
+feature_coverage/layer_2/mac_3: 1
+feature_coverage/layer_2/mac_4: 1
+match_accuracy: 0
+match_accuracy/layer_1: 0
+match_accuracy/layer_1/mac_1: 0
+match_accuracy/layer_1/mac_2: 0
+match_accuracy/layer_1/mac_3: 0
+match_accuracy/layer_1/mac_4: 0
+match_accuracy/layer_1/mac_5: 0
+match_accuracy/layer_1/mac_6: 0
+match_accuracy/layer_1/mac_7: 0
+match_accuracy/layer_1/mac_8: 0
+match_accuracy/layer_1/mac_9: 0
+match_accuracy/layer_2: 0
+match_accuracy/layer_2/mac_1: 0
+match_accuracy/layer_2/mac_2: 0
+match_accuracy/layer_2/mac_3: 0
+match_accuracy/layer_2/mac_4: 0
+num_activations: 0.8333333730697632
+num_activations/layer_1: 0.6666666865348816
+num_activations/layer_1/mac_1: 1
+num_activations/layer_1/mac_2: 0
+num_activations/layer_1/mac_3: 1
+num_activations/layer_1/mac_4: 0
+num_activations/layer_1/mac_5: 1
+num_activations/layer_1/mac_6: 0
+num_activations/layer_1/mac_7: 1
+num_activations/layer_1/mac_8: 1
+num_activations/layer_1/mac_9: 1
+num_activations/layer_2: 1
+num_activations/layer_2/mac_1: 1
+num_activations/layer_2/mac_2: 1
+num_activations/layer_2/mac_3: 1
+num_activations/layer_2/mac_4: 1
+training_dataset_description: 50-item test MNIST dataset
