@@ -79,18 +79,64 @@ def process_visualization_data(model_config):
         num_cms = params.get("num_cms_per_mac", 1)
         num_neurons = params.get("num_neurons_per_cm", 1)
 
-        mac_positions = hex_grid(rows, cols, hex_size=1.5)
         z = idx * 10  # Layer depth
 
-        for mac_x, mac_y in mac_positions:
-            visualization_data.append({"type": "mac", "x": mac_x, "y": mac_y, "z": z})
+        # mac positions (M, 2) where M = rows*cols
+        mac_positions = hex_grid(rows, cols, hex_size=1.5)
 
-            cm_positions = cm_centers(mac_x, mac_y, size=0.7, num_cms=num_cms)
-            for cm_x, cm_y in cm_positions:
-                visualization_data.append({"type": "cm", "x": cm_x, "y": cm_y, "z": z})
+        # mac dicts
+        visualization_data.extend(
+            {"type": "mac", "x": x, "y": y, "z": z}
+            for x, y in mac_positions
+        )
 
-                neuron_positions = neuron_centers(cm_x, cm_y, radius=0.1, num_neurons=num_neurons)
-                for neuron_x, neuron_y in neuron_positions:
-                    visualization_data.append({"type": "neuron", "x": neuron_x, "y": neuron_y, "z": z})
+        if num_cms > 1:
+            angles_cms = np.linspace(0, 2 * np.pi, num_cms, endpoint=False)
 
+            offsets_cms = np.stack(
+                [np.cos(angles_cms), np.sin(angles_cms)],
+                axis=1
+            ) * 0.7
+
+            all_cm_positions = mac_positions[:, None, :] + offsets_cms[None, :, :]
+        else:
+            # if only 1 cm
+            all_cm_positions = mac_positions[:, None, :]
+
+        flat_cm_positions = all_cm_positions.reshape(-1, 2)
+
+        # build CM dicts
+        visualization_data.extend(
+            {"type": "cm", "x": x, "y": y, "z": z}
+            for x, y in flat_cm_positions
+        )
+
+        # neuron positions for each cm (vectorized)
+        if num_neurons > 1:
+            angles_neurons = np.linspace(
+                0,
+                2 * np.pi,
+                num_neurons,
+                endpoint=False
+            )
+
+            offsets_neurons = np.stack(
+                [np.cos(angles_neurons), np.sin(angles_neurons)],
+                axis=1
+            ) * (2 * 0.1)
+
+            all_neuron_positions = all_cm_positions[:, :, None, :] + offsets_neurons[None, None, :, :]
+
+        else:
+            # if only 1 nueron
+            all_neuron_positions = all_cm_positions[:, :, None, :]
+
+        # flatten to shape (M*num_cms*num_neurons, 2)
+        flat_neuron_positions = all_neuron_positions.reshape(-1, 2)
+
+        # build neuron dicts
+        visualization_data.extend(
+            {"type": "neuron", "x": x, "y": y, "z": z}
+            for x, y in flat_neuron_positions
+        )
     return visualization_data
