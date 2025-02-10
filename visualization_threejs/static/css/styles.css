@@ -1,0 +1,24 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 20px;
+}
+
+label {
+  margin-right: 10px;
+}
+
+select {
+  margin-right: 20px;
+  padding: 5px;
+}
+
+button {
+  padding: 5px 10px;
+}
+
+#threejs-container {
+  width: 100%;
+  height: 80vh;
+  margin-top: 20px;
+  border: 1px solid #ccc;
+}
