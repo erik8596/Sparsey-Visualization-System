@@ -96,7 +96,7 @@ def process_visualization_data(model_config):
             offsets_cms = np.stack(
                 [np.cos(angles_cms), np.sin(angles_cms)],
                 axis=1
-            ) * 0.7
+            ) * 1     # TODO: might have to create a function to determine the cm offsets based on the number and/or size of run
 
             all_cm_positions = mac_positions[:, None, :] + offsets_cms[None, :, :]
         else:
@@ -123,7 +123,7 @@ def process_visualization_data(model_config):
             offsets_neurons = np.stack(
                 [np.cos(angles_neurons), np.sin(angles_neurons)],
                 axis=1
-            ) * (2 * 0.1)
+            ) * 0.3 # * (2 * 0.1)
 
             all_neuron_positions = all_cm_positions[:, :, None, :] + offsets_neurons[None, None, :, :]
 

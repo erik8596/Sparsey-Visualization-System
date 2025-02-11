@@ -36,7 +36,7 @@ def get_runs_route():
     if not project_name:
         return jsonify({"error": "No WandB project specified"}), 400
 
-    entity = "sparsey-testing-system"  # Replace with your actual entity/team name
+    entity = "sparsey-testing-system"
     try:
         runs = get_runs_from_project(entity, project_name)
         return jsonify(runs)
@@ -49,7 +49,7 @@ def visualize():
     """Visualize a specific run."""
     data = request.get_json()
     run_id = data.get("run_id")
-    project_name = data.get("project")  # Pass project name to locate the run
+    project_name = data.get("project")
 
     if not run_id:
         return jsonify({"error": "No WandB run selected"}), 400
@@ -60,7 +60,9 @@ def visualize():
     try:
         model_config = fetch_wandb_model(run_id, project_name)
         visualization_data = process_visualization_data(model_config)
-        return jsonify({"layers": visualization_data})
+        response_data = {"layers": visualization_data}
+        print(f"Sending visualization data: {response_data}")  # Log the data being sent to the client
+        return jsonify(response_data)
     except ValueError as e:
         return jsonify({"error": str(e)}), 500
 

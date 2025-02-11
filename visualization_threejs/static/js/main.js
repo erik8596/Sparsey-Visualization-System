@@ -140,62 +140,62 @@ async function loadRun() {
 
 // Visualize the data using Three.js
 function visualizeData(layers) {
-    // Clear existing scene
-    if (scene) {
-        while (scene.children.length > 0) {
-            scene.remove(scene.children[0]);
-        }
-    } else {
-        // Initialize Three.js scene
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xffffff);  // Set white background
+  // Clear existing scene
+  if (scene) {
+      while (scene.children.length > 0) {
+          scene.remove(scene.children[0]);
+      }
+  } else {
+      // Initialize Three.js scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xffffff);  // Set white background
 
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 0, 50);
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 0, 50);
 
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.getElementById('threejs-container').appendChild(renderer.domElement);
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.getElementById('threejs-container').appendChild(renderer.domElement);
 
-        // Add orbit controls for zoom and pan
-        controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.maxDistance = 200;
-        controls.screenSpacePanning = false;
+      // Add orbit controls for zoom and pan
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxDistance = 200;
+      controls.screenSpacePanning = false;
 
-        // Handle window resize
-        window.addEventListener('resize', onWindowResize, false);
+      // Handle window resize
+      window.addEventListener('resize', onWindowResize, false);
+  }
+
+  const mac_spacing = 1.33;  // Increase spacing between MACs
+
+  layers.forEach(element => {
+    let shape, material, points, lineGeometry, line;
+
+    if (element.type === "mac") {
+        shape = new THREE.Shape();
+        drawHexagon(shape, 2.0);  // Adjust MAC size here
+        material = new THREE.LineBasicMaterial({ color: 0x0000ff, linewidth: 1 });  // Thin blue line
+    } else if (element.type === "cm") {
+        shape = new THREE.Shape();
+        drawHexagon(shape, 0.5);  // Adjust CM size here
+        material = new THREE.LineBasicMaterial({ color: 0x008000, linewidth: 1 });  // Thin green line
+    } else if (element.type === "neuron") {
+        shape = new THREE.Shape();
+        drawCircle(shape, 0.10);  // Adjust neuron size here
+        material = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });  // Thin black line
     }
 
-    const mac_spacing = 1.33;  // Increase spacing between MACs
+    // Convert shape to line geometry
+    points = shape.getPoints();
+    lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+    line = new THREE.LineLoop(lineGeometry, material);
+    line.position.set(element.x, element.y * mac_spacing, element.z);
+    scene.add(line);
+  });
 
-    layers.forEach(element => {
-        let shape, material, points, lineGeometry, line;
-
-        if (element.type === "mac") {
-            shape = new THREE.Shape();
-            drawHexagon(shape, 2.0);  // Adjust MAC size here
-            material = new THREE.LineBasicMaterial({ color: 0x0000ff, linewidth: 1 });  // Thin blue line
-        } else if (element.type === "cm") {
-            shape = new THREE.Shape();
-            drawHexagon(shape, 0.5);  // Adjust CM size here
-            material = new THREE.LineBasicMaterial({ color: 0x008000, linewidth: 1 });  // Thin green line
-        } else if (element.type === "neuron") {
-            shape = new THREE.Shape();
-            drawCircle(shape, 0.10);  // Adjust neuron size here
-            material = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });  // Thin black line
-        }
-
-        // Convert shape to line geometry
-        points = shape.getPoints();
-        lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
-        line = new THREE.LineLoop(lineGeometry, material);
-        line.position.set(element.x, element.y * mac_spacing, element.z);
-        scene.add(line);
-    });
-
-    animate();
+  animate();
 }
 
 // Handle window resize
