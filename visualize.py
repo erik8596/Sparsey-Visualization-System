@@ -8,7 +8,7 @@
 # app = Flask(__name__)
 
 # # Path to the directory containing network models
-# NETWORK_CONFIGS_DIR = "/Users/erik/Desktop/SparseyTestingSystem/demo/example_configs/presentation_configs"
+# NETWORK_CONFIGS_DIR = "/home/ryumakiguchi/code/ryumakiguchi/Sparsey/SparseyTestingSystem/demo/example_configs/presentation_4_configs"
 
 # @app.route("/")
 # def index():

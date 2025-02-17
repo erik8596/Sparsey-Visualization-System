@@ -59,9 +59,15 @@ def visualize():
 
     try:
         model_config = fetch_wandb_model(run_id, project_name)
-        visualization_data = process_visualization_data(model_config)
-        response_data = {"layers": visualization_data}
-        print(f"Sending visualization data: {response_data}")  # Log the data being sent to the client
+        visualization_data = process_visualization_data(model_config["config"])  # Pass only the config part
+
+        # Combine the visualization data with input dimensions
+        response_data = {
+            "layers": visualization_data["layers"],
+            "input_dimensions": model_config["input_dimensions"]
+        }
+
+        print(f"Sending visualization data: {response_data}")  # Log the data being sent
         return jsonify(response_data)
     except ValueError as e:
         return jsonify({"error": str(e)}), 500

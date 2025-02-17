@@ -1,6 +1,7 @@
 import plotly.graph_objects as go
 import numpy as np
 from grid_utils import mac_boundary
+# from visualize_input_layer import get_input_layer_traces
 
 """implementation for rendering 3D instances. Slower, but contains logic for rendering multiple layers"""
 class RenderManager:
