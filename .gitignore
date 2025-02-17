@@ -1,0 +1,6 @@
+.venv/
+.vscode/
+ruf/
+.env
+sparseypyvis.egg-info/
+__pycache__
