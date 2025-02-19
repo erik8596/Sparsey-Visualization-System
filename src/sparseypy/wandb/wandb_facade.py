@@ -196,6 +196,23 @@ class WandBFacade:
             except Exception as e:
                 logging.error(f"Unexpected error: {e}")
                 raise ValueError(f"Unexpected error: {e}")
+            
+    def fetch_run(self, run_id: str = None):
+        """
+        Returns the run object from weights and biases for the particular run id.
+        Uses the configured value or the supplied argument value for run_id
+        """
+        if not run_id:
+            run_info = self.config.get_run()
+            if not run_info:
+                raise ValueError("No run configured. Please provide run_id or configure a run first.")
+            run_id = run_info[0]
+
+        try:
+            return self.api.run(f"{self.ENTITY_PROJECT}/{run_id}")
+        except Exception as e:
+            print(e)
+            
 
     def get_run_info(self):
         """Get basic information about all runs in the project.
@@ -212,7 +229,7 @@ class WandBFacade:
             })
         return run_info
 
-    def get_run_by_id(self, run_id):
+    def get_run_by_id(self, run_id: str):
         """Get a specific run by its ID.
         
         Args:
@@ -224,22 +241,35 @@ class WandBFacade:
         if self.project_runs is not None:
             for run in self.project_runs:
                 if run.get('id') == run_id:
-                    return run
+                    return self.fetch_run(run_id)
         return None
 
-    def get_run_metrics(self, run_id):
+    def get_run_metrics(self, run_id: str = None) -> dict:
         """Get metrics for a specific run.
         
         Args:
-            run_id (str): The ID of the run to get metrics for
+            run_id (str, optional): The ID of the run to get metrics for. If not provided,
+                                  uses the currently configured run ID.
             
         Returns:
             dict: Dictionary containing the run's metrics
+            
+        Raises:
+            ValueError: If run_id is invalid or no run is configured
         """
+        # Use provided run_id or get from config
+        if not run_id:
+            run_info = self.config.get_run()
+            if not run_info:
+                raise ValueError("No run configured. Please provide run_id or configure a run first.")
+            run_id = run_info[0]
+            
+        # Get the run
         run = self.get_run_by_id(run_id)
-        if run:
-            return run.history()
-        return None
+        if not run:
+            raise ValueError(f"Run with ID {run_id} not found")
+            
+        return run.history()
     
     def set_run(self, run: dict) -> bool:
         """Set the current run and save it to config.
@@ -267,36 +297,71 @@ class WandBFacade:
             logging.error(f"Failed to set run: {e}")
             return False
 
-    def fetch_model(self, project_name: str, run_id: str) -> dict:
-        """Fetch a specific run from WandB and return processed model config.
+    def fetch_model(self, project_name: str = None, run_id: str = None) -> dict:
+        """Fetch model configuration from a specific WandB run.
+        
+        If project_name and run_id are not provided, uses the currently configured run.
         
         Args:
-            project_name (str): Name of the WandB project
-            run_id (str): ID of the run to fetch
+            project_name (str, optional): Name of the WandB project
+            run_id (str, optional): ID of the run to fetch
             
         Returns:
-            dict: Dictionary containing the model's layer configuration
+            dict: Dictionary containing the model's configuration
             
         Raises:
-            ValueError: If run_id is empty, network error occurs, or no layers found
+            ValueError: If run cannot be found or accessed
         """
-        if not run_id or not project_name:
-            raise ValueError("Please provide valid run ID and project name.")
-
         try:
-            print(f"Fetching WandB run: {run_id} from project: {project_name}")
-            run = self.api.run(f"{self.entity}/{project_name}/{run_id}")
             
-            if not (model_config := getattr(run, "config", {}).get("model", {}).get("layers", {})):
-                raise ValueError(f"No layers found in WandB run {run_id}!")
-
-            print(f"✅ Successfully fetched model config for run: {run_id}")
+            # Use provided values or fall back to configured values
+            if not project_name and not run_id:
+                run_info = self.config.get_run()
+                if not run_info or len(run_info) != 2:
+                    raise ValueError("No valid run configured. Please provide run_id and project_name or configure a run first.")
+                run_id = run_info[0]  # First element is run_id
+            # logging.info(f"Fetching WandB run: {run_path}")
+            
+            run = self.fetch_run(f"{self.ENTITY_PROJECT}/{run_id}")
+            
+            # Extract all relevant model information
+            model_config = {
+                'model': run.config.get('model', {}),
+                'metadata': {
+                    'created_at': run.created_at,
+                    'name': run.name,
+                    'tags': run.tags,
+                    'group': run.group
+                }
+            }
+            
+            if not model_config['model']['layers']:
+                raise ValueError(f"No layer configuration found in run {run_id}")
+                
+            logging.info(f"Successfully fetched model config for run: {run_id}")
             return model_config
 
         except wandb.errors.CommError as e:
-            raise ValueError(f"Network error while fetching WandB run: {str(e)}")
+            error_msg = f"Network error while fetching WandB run: {str(e)}"
+            logging.error(error_msg)
+            raise ValueError(error_msg)
         except wandb.errors.Error as e:
-            raise ValueError(f"WandB API error: {str(e)}")
+            error_msg = f"WandB API error: {str(e)}"
+            logging.error(error_msg)
+            raise ValueError(error_msg)
         except Exception as e:
-            raise ValueError(f"Unexpected error: {str(e)}")
+            error_msg = f"Unexpected error while fetching model: {str(e)}"
+            logging.error(error_msg)
+            raise ValueError(error_msg)
+        
+    # def fetch_run_config(self, project_name: str = None, run_id: str = None) -> dict:
+    #     try:
+    #         if not project_name and not run_id:
+    #             run_info = self.config.get_run()
+    #             if not run_info or len(run_info) != 2:
+    #                 raise ValueError("No valid run configured. Please provide run_id and project_name or configure a run first.")
+    #             run_id = run_info[0] 
 
+    #         run = self.fetch_run(f"{self.ENTITY_PROJECT}/{run_id}")
+
+    #         run_config = run.config
