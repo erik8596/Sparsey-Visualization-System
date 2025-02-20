@@ -152,19 +152,28 @@ class WandBFacade:
         Returns:
             list: List of available projects
         """
-        if self.projects_list is None:
-            try:
+        try:
+            print("WandBFacade: Attempting to load projects")
+            # Reset projects_list if it's None
+            if self.projects_list is None:
                 self.projects_list = [project.name for project in self.api.projects(entity=self.entity)]
-                return self.projects_list
-            except wandb.errors.CommError as e:
-                logging.error(f"Network error while fetching projects: {e}")
-                raise ValueError(f"Network error while fetching projects: {e}") 
-            except wandb.errors.Error as e:
-                logging.error(f"WandB API error: {e}")
-                raise ValueError(f"WandB API error: {e}")
-            except Exception as e:
-                logging.error(f"Unexpected error: {e}")
-                raise ValueError(f"Unexpected error: {e}")
+                print(f"WandBFacade: Projects loaded successfully: {self.projects_list is not None}")
+            else:
+                print("WandBFacade: Returning cached projects list")
+            return self.projects_list
+        
+        except wandb.errors.CommError as e:
+            print(f"WandBFacade: Network error while fetching projects: {e}")
+            self.projects_list = None  # Reset on error
+            raise ValueError(f"Network error while fetching projects: {e}") 
+        except wandb.errors.Error as e:
+            print(f"WandBFacade: WandB API error: {e}")
+            self.projects_list = None  # Reset on error
+            raise ValueError(f"WandB API error: {e}")
+        except Exception as e:
+            print(f"WandBFacade: Unexpected error: {e}")
+            self.projects_list = None  # Reset on error
+            raise ValueError(f"Unexpected error: {e}")
 
     def load_runs_by_project(self, project_name: str = None) -> dict:
         """Get all available runs within a project from WandB.
@@ -353,15 +362,3 @@ class WandBFacade:
             error_msg = f"Unexpected error while fetching model: {str(e)}"
             logging.error(error_msg)
             raise ValueError(error_msg)
-        
-    # def fetch_run_config(self, project_name: str = None, run_id: str = None) -> dict:
-    #     try:
-    #         if not project_name and not run_id:
-    #             run_info = self.config.get_run()
-    #             if not run_info or len(run_info) != 2:
-    #                 raise ValueError("No valid run configured. Please provide run_id and project_name or configure a run first.")
-    #             run_id = run_info[0] 
-
-    #         run = self.fetch_run(f"{self.ENTITY_PROJECT}/{run_id}")
-
-    #         run_config = run.config
