@@ -29,7 +29,7 @@ def get_project_runs(project_name):
             print("API: Warning - load_runs_by_project() returned None")
             return jsonify({'project_runs': [], 'warning': 'No project runs found'})
         
-        print(f"API: Successfully loaded {len(project_runs)} projects")
+        print(f"API: Successfully loaded {len(project_runs)} project runs.")
         return jsonify({'project_runs': project_runs})
     except Exception as e:
         print(f"API: Error loading project runs - {str(e)}")

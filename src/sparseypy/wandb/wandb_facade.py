@@ -178,8 +178,11 @@ class WandBFacade:
     def load_runs_by_project(self, project_name: str = None) -> dict:
         """Get all available runs within a project from WandB.
         
+        Args:
+            project_name: Name of the project to load runs from
+            
         Returns:
-            list: List of available run in a project
+            list: List of available runs in a project
         """
         # Use provided project name or default to class project
         entity_project = self.ENTITY_PROJECT
@@ -189,23 +192,24 @@ class WandBFacade:
             else:
                 raise ValueError(f"Project {project_name} not found in available projects")
 
-        if not self.project_runs:
-            try:
-                self.project_runs = [
-                    {"id": run.id, "name": run.name} 
-                    for run in self.api.runs(entity_project, order="-created_at")
-                ]
-                return self.project_runs
-            except wandb.errors.CommError as e:
-                logging.error(f"Network error while fetching projects: {e}")
-                raise ValueError(f"Network error while fetching projects: {e}") 
-            except wandb.errors.Error as e:
-                logging.error(f"WandB API error: {e}")
-                raise ValueError(f"WandB API error: {e}")
-            except Exception as e:
-                logging.error(f"Unexpected error: {e}")
-                raise ValueError(f"Unexpected error: {e}")
-            
+        try:
+            # always fetch fresh runs for the selected project
+            project_runs = [
+                {"id": run.id, "name": run.name} 
+                for run in self.api.runs(entity_project, order="-created_at")
+            ]
+            print(f"WandBFacade: Loaded {len(project_runs)} runs for project {project_name}")
+            return project_runs
+        except wandb.errors.CommError as e:
+            logging.error(f"Network error while fetching runs: {e}")
+            raise ValueError(f"Network error while fetching runs: {e}") 
+        except wandb.errors.Error as e:
+            logging.error(f"WandB API error: {e}")
+            raise ValueError(f"WandB API error: {e}")
+        except Exception as e:
+            logging.error(f"Unexpected error: {e}")
+            raise ValueError(f"Unexpected error: {e}")
+
     def fetch_run(self, run_id: str = None):
         """
         Returns the run object from weights and biases for the particular run id.
