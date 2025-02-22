@@ -153,3 +153,4 @@ def process_visualization_data(model_config):
         "layers": visualization_data,
         "input_dimensions": input_dimensions
     }
+

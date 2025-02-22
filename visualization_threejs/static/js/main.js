@@ -329,3 +329,34 @@ function drawCircle(shape, radius) {
 }
 
 window.onload = initialize;
+
+
+async function loadRun() {
+  let runDropdown = document.getElementById('runSelect');
+  let run_id = runDropdown.value;
+  let project_name = document.getElementById('projectSelect').value;
+
+  try {
+    let response = await fetch('/visualize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_id, project: project_name })
+    });
+    let data = await response.json();
+
+    // Extract layers and input dimensions
+    const { input_dimensions, layers } = data;
+
+    // Visualize the network layers
+    visualizeData(layers, false);
+
+    // Create the input grid for the first layer
+    createInputGrid(input_dimensions.width, input_dimensions.height);
+
+    // Start the Three.js render loop
+    animate();
+  } catch (error) {
+    console.error("Error during visualization:", error);
+    alert("Failed to visualize the run.");
+  }
+}
