@@ -30,7 +30,6 @@ async function loadProjects() {
 // Call loadProjects when the page loads
 window.addEventListener('DOMContentLoaded', loadProjects);
 
-
 async function loadProjectRuns(projectName) {
     try {
         const response = await fetch(`/api/${projectName}/runs`);

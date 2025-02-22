@@ -12,7 +12,7 @@ def create_app():
     app.secret_key = environ.get('SVS_FLASK_SECRET_KEY')
 
     # blueprint registration
-    from src.sparseypy.web.routes import api_bp, views_bp
+    from src.sparseypyvis.web.routes import api_bp, views_bp
     app.register_blueprint(api_bp)
     app.register_blueprint(views_bp)
 

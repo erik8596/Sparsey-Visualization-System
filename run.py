@@ -1,5 +1,5 @@
 import os
-from src.sparseypy.web.app import create_app
+from src.sparseypyvis.web.app import create_app
 
 if __name__ == '__main__':
     app = create_app()

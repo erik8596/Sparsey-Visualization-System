@@ -1,12 +1,18 @@
 from flask import Blueprint, jsonify
-from src.sparseypy.wandb.wandb_facade import WandBFacade
+from src.sparseypyvis.wandb.wandb_facade import WandBFacade
 
 api = Blueprint('api', __name__, url_prefix='/api')
 
-wandbf = WandBFacade()
+wandbf = WandBFacade() # singleton instance
 
 @api.route('/projects', methods=['GET'])
 def get_projects():
+    """
+    Retrieves all available W&B projects.
+    Returns:
+        200: JSON containing list of projects
+        500: Error message if project loading fails
+    """
     try:
         projects = wandbf.load_projects()
         if projects is None:
@@ -22,6 +28,14 @@ def get_projects():
 
 @api.route('/<project_name>/runs', methods=['GET'])
 def get_project_runs(project_name):
+    """
+    Retrieves all runs for a specific W&B project.
+    Args:
+        project_name (str): Name of the W&B project
+    Returns:
+        200: JSON containing list of project runs
+        500: Error message if run loading fails
+    """
     try:
         project_runs = wandbf.load_project_runs(project_name=project_name)
         if project_runs is None:
@@ -36,6 +50,15 @@ def get_project_runs(project_name):
     
 @api.route('/<project_name>/<run_id>/model_config', methods=['GET'])
 def get_model_config(project_name, run_id):
+    """
+    Fetches model configuration for a specific run in a project.
+    Args:
+        project_name (str): Name of the W&B project
+        run_id (str): ID of the specific run
+    Returns:
+        200: JSON containing model configuration
+        500: Error message if config fetching fails
+    """
     try:
         model_config = wandbf.fetch_model_config(run_id=run_id, project_name=project_name)
         if model_config is None:
@@ -50,6 +73,14 @@ def get_model_config(project_name, run_id):
     
 @api.route('update-project/<project_name>', methods=['POST'])
 def update_project(project_name):
+    """
+    Updates the local cache for a specific W&B project.
+    Args:
+        project_name (str): Name of the W&B project to update
+    Returns:
+        200: Success message
+        500: Error message if update fails
+    """
     try:
         wandbf.update_project(project_name=project_name)
         return jsonify({'message': 'Project updated successfully'})
@@ -59,6 +90,15 @@ def update_project(project_name):
     
 @api.route('update-run/<project_name>/<run_id>', methods=['POST'])
 def update_run(project_name, run_id):
+    """
+    Updates the local cache for a specific run in a project.
+    Args:
+        project_name (str): Name of the W&B project
+        run_id (str): ID of the run to update
+    Returns:
+        200: Success message
+        500: Error message if update fails
+    """
     try:
         wandbf.update_run(run_id=run_id, project_name=project_name)
         return jsonify({'message': 'Run updated successfully'})

@@ -8,7 +8,7 @@ from flask import (
     flash
 )
 import requests
-from src.sparseypy.wandb.wandb_facade import WandBFacade
+from src.sparseypyvis.wandb.wandb_facade import WandBFacade
 
 views = Blueprint('views', __name__)
 

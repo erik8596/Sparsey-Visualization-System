@@ -1,7 +1,6 @@
 # WandB Facade Class
 
 import wandb
-import logging
 from dataclasses import dataclass, field
 import yaml
 
@@ -120,6 +119,25 @@ class WandBConfig:
 
 @dataclass
 class WandBFacade:
+    """
+    A facade class that provides simplified interface to Weights & Biases (W&B) API.
+    Implements singleton pattern to ensure single instance of W&B connection.
+    
+    Attributes:
+        project_name (str): Current project name
+        project_id (str): Current project ID
+        run_name (str): Current run name
+        run_id (str): Current run ID
+        run_config (dict): Configuration of current run
+        entity (str): W&B entity name (organization/username)
+        projects_list (list): Cache of available projects
+        project_runs (list): Cache of runs in current project
+        runs_list (list): List of all runs
+        _api (wandb.Api): W&B API instance
+        project (object): Current project object
+        run (object): Current run object
+    """
+
     project_name: str = None
     project_id: str = None
     run_name: str = None
@@ -135,18 +153,44 @@ class WandBFacade:
     run: object = None
     _instance = None
 
+    # singleton init
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
             cls._instance = super().__new__(cls)
         return cls._instance
 
     def summary(self) -> str:
+        """
+        Returns a formatted string summary of current entity, project, and run.
+        
+        Returns:
+            str: Summary string of current state
+        """
         return f"\nEntity: {self.entity}\nProject Id: {self.project_id} -> {self.project}\nRun Id: {self.run_id} -> {self.run}"
     
     def get_status(self) -> dict[str]:
+        """
+        Returns the complete internal state of the facade.
+        
+        Returns:
+            dict: Dictionary containing all instance attributes
+        """
         return self.__dict__
     
     def load_projects(self, entity_name: str = None) -> list:
+        """
+        Fetches and caches all projects for the given entity from W&B.
+        Uses cached results if available and valid.
+        
+        Args:
+            entity_name (str, optional): W&B entity to fetch projects from. Defaults to self.entity.
+            
+        Returns:
+            list: List of project names
+            
+        Raises:
+            ValueError: If network, API, or other errors occur during fetch
+        """
         entity = entity_name or self.entity
         try:
             print("Attempting to load projects...")
@@ -165,17 +209,31 @@ class WandBFacade:
                 # return cached project list
                 return self.projects_list
         except wandb.errors.CommError as e:
-            self.projects_list = None  # Reset on error
+            self.projects_list = None  # reset on error
             raise ValueError(f"Network error while fetching projects: {e}") 
         except wandb.errors.Error as e:
-            self.projects_list = None  # Reset on error
+            self.projects_list = None  # reset on error
             raise ValueError(f"WandB API error: {e}")
         except Exception as e:
-            self.projects_list = None  # Reset on error
+            self.projects_list = None  # reset on error
             raise ValueError(f"Unexpected error: {e}")
         
 
     def load_project_runs(self, project_name: str = None, entity_name: str = None) -> list:
+        """
+        Fetches and caches all runs for a specific project.
+        Compares with cached runs to determine if refresh is needed.
+        
+        Args:
+            project_name (str, optional): Project to fetch runs from. Defaults to current project.
+            entity_name (str, optional): Entity name. Defaults to current entity.
+            
+        Returns:
+            list: List of run dictionaries containing ID and name
+            
+        Raises:
+            ValueError: If network, API, or other errors occur during fetch
+        """
         entity = entity_name or self.entity
         project = project_name or self.project
 
@@ -204,16 +262,29 @@ class WandBFacade:
                 return loaded_runs
 
         except wandb.errors.CommError as e:
-            self.project_runs = None  # Reset on error
+            self.project_runs = None  # reset on error
             raise ValueError(f"Network error while fetching project runs: {e}")
         except wandb.errors.Error as e:
-            self.project_runs = None  # Reset on error
+            self.project_runs = None  # reset on error
             raise ValueError(f"WandB API error: {e}")
         except Exception as e:
-            self.project_runs = None  # Reset on error
+            self.project_runs = None  # reset on error
             raise ValueError(f"Unexpected error while fetching project runs: {e}")
         
     def fetch_project(self, project_name: str = None, entity_name: str = None) -> wandb.Api.project:
+        """
+        Retrieves a specific project from W&B API.
+        
+        Args:
+            project_name (str, optional): Name of project to fetch
+            entity_name (str, optional): Entity name. Defaults to current entity.
+            
+        Returns:
+            wandb.Api.project: W&B project object
+            
+        Raises:
+            ValueError: If network, API, or other errors occur during fetch
+        """
         entity_name = entity_name or self.entity
         if not project_name or (project_name != self.project_name):
             try:
@@ -227,7 +298,21 @@ class WandBFacade:
         else:
             return self.project
         
-    def fetch_run(self, run_id: str, project_name: str = None, entity_name: str =  None) -> wandb.Api.run:
+    def fetch_run(self, run_id: str, project_name: str = None, entity_name: str = None) -> wandb.Api.run:
+        """
+        Retrieves a specific run from W&B API.
+        
+        Args:
+            run_id (str): ID of run to fetch
+            project_name (str, optional): Project name. Defaults to current project.
+            entity_name (str, optional): Entity name. Defaults to current entity.
+            
+        Returns:
+            wandb.Api.run: W&B run object
+            
+        Raises:
+            ValueError: If network, API, or other errors occur during fetch
+        """
         entity_name = entity_name or self.entity
         project_name = project_name or self.project_name
         if not run_id or (run_id not in self.project_runs):
@@ -243,6 +328,18 @@ class WandBFacade:
             return self.run
         
     def update_project(self, project_name: str) -> bool:
+        """
+        Updates current project with new project data from W&B.
+        
+        Args:
+            project_name (str): Name of project to update to
+            
+        Returns:
+            bool: True if update successful, False if project not found
+            
+        Raises:
+            ValueError: If network, API, or other errors occur during update
+        """
         try:
             if project_name in self.projects_list:
                 fetched_project = self.fetch_project(project_name)
@@ -262,6 +359,20 @@ class WandBFacade:
             raise ValueError(f"Failed to update project due to unexpected error: {e}")
         
     def update_run(self, run_id: str, project_name: str = None, entity_name: str = None) -> bool:
+        """
+        Updates current run with new run data from W&B.
+        
+        Args:
+            run_id (str): ID of run to update to
+            project_name (str, optional): Project name. Defaults to current project.
+            entity_name (str, optional): Entity name. Defaults to current entity.
+            
+        Returns:
+            bool: True if update successful, False if run not found
+            
+        Raises:
+            ValueError: If network, API, or other errors occur during update
+        """
         entity = entity_name or self.entity
         project = project_name or self.project_name
         try:
@@ -285,6 +396,21 @@ class WandBFacade:
             raise ValueError(f"Failed to update run due to unexpected error: {e}")
 
     def fetch_model_config(self, run_id: str = None, project_name: str = None, entity_name: str = None) -> dict:
+        """
+        Retrieves model configuration from a specific run.
+        
+        Args:
+            run_id (str, optional): ID of run to fetch config from. Defaults to current run.
+            project_name (str, optional): Project name. Defaults to current project.
+            entity_name (str, optional): Entity name. Defaults to current entity.
+            
+        Returns:
+            dict: Dictionary containing model configuration and metadata
+            
+        Raises:
+            ValueError: If network, API, or other errors occur during fetch,
+                      or if no layer configuration is found
+        """
         entity = entity_name or self.entity
         project_name = project_name or self.project_name
         run_id = run_id or self.run_id
