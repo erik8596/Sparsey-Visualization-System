@@ -7,10 +7,6 @@ charset-normalizer==3.4.0
 click==8.1.7
 colorama==0.4.6
 comm==0.2.2
-dash==2.18.2
-dash-core-components==2.0.0
-dash-html-components==2.0.0
-dash-table==5.0.0
 debugpy==1.8.7
 decorator==5.1.1
 executing==2.1.0
@@ -43,7 +39,6 @@ parso==0.8.4
 pexpect==4.9.0
 pillow==11.0.0
 platformdirs==4.3.6
-plotly==5.24.1
 prompt_toolkit==3.0.48
 psutil==6.1.0
 ptyprocess==0.7.0
