@@ -4,3 +4,4 @@ ruf/
 .env
 sparseypyvis.egg-info/
 __pycache__
+src/sparseypy/core/

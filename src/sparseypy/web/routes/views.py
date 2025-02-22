@@ -18,6 +18,7 @@ wandbf = WandBFacade()
 @views.route('/')
 def index():
     '''Home Page Route'''
+    # server-side approach
     # Get list of runs from WandB
     # try:
     #     response = requests.get(url_for('api.get_projects', _external=True))
@@ -32,3 +33,15 @@ def index():
     
     # return render_template('index.html', projects=projects)
     return render_template('index.html')
+
+@views.route('/visualize')
+def visualize():
+
+    
+    
+    return render_template('visualize.html')
+
+# @views.route('/visualize/<project>/<run_id>')
+# def visualize(project, run_id):
+
+#     return render_template('visualize.html')

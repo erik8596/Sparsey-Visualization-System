@@ -1,0 +1,17 @@
+@startuml idea_diagram
+
+class Model()
+
+class Layer()
+
+class MAC()
+
+class Neuron()
+
+
+Model -> Layer
+Layer -> MAC
+MAC -> Nueron
+
+
+@enduml

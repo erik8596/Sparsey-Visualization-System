@@ -44,6 +44,18 @@ async function loadProjectRuns(projectName) {
 
 projects_dropdown.addEventListener('change', async function() {
     const selected_project = projects_dropdown.value;
+
+    // Change GET to POST request
+    const response = await fetch(`/api/update-project/${selected_project}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ project: selected_project })
+    });
+    
+    const data = await response.json();
+    console.log("Project Update Response: ", data);
     console.log("Selected Project: ", selected_project);
 
     // enable the runs dropdown once a project is selected
@@ -67,6 +79,33 @@ projects_dropdown.addEventListener('change', async function() {
 });
 
 // Enable visualize button when a run is selected
-project_runs_dropdown.addEventListener('change', function() {
+project_runs_dropdown.addEventListener('change', async function() {
+    const selected_project_run = project_runs_dropdown.value;
+
+    // update the run in the backend
+    const response = await fetch(`/api/update-run/${projects_dropdown.value}/${selected_project_run}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ run_id: selected_project_run })
+    });
+    const data = await response.json();
+    console.log("Run Update Response: ", data);
+    console.log("Selected Project Run: ", selected_project_run)
     document.getElementById('visualizeButton').disabled = !this.value;
 });
+
+async function loadRun() {
+    try {
+        const response = await fetch(
+            `/api/${projects_dropdown.value}/${project_runs_dropdown.value}/model_config`
+        );
+        const data = await response.json();
+        console.log("Loaded Model Run Config: ", data.model_config.model.model_name);
+        return data.model;
+    } catch (error) {
+        console.error('Error loading run config:', error);
+        return [];
+    }
+}

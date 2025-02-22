@@ -2,8 +2,10 @@
 
 import wandb
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import yaml
+
+STS = "sparsey-testing-system"  # default entity name for weights and biases
 
 @dataclass
 class WandBConfig:
@@ -116,226 +118,180 @@ class WandBConfig:
             "run_id": self.__run_id
         }
 
-
+@dataclass
 class WandBFacade:
+    project_name: str = None
+    project_id: str = None
+    run_name: str = None
+    run_id: str = None
+    run_config: dict = field(default_factory=dict)
+    entity: str = field(default=STS)
+    projects_list: list = field(default_factory=list)
+    project_runs: list = field(default_factory=list)
+    runs_list: list = field(default_factory=list)
+    _api: wandb.Api = field(default_factory=wandb.Api)
+
+    project: object = None
+    run: object = None
     _instance = None
-    _initialized = False  # Add this to track initialization
 
     def __new__(cls, *args, **kwargs):
-        """Ensure only one instance of WandBFacade exists"""
-        if cls._instance is None:
+        if not cls._instance:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, entity=None, api=None, config=None):
-        """Initialize the WandBFacade instance only once"""
-        # Guard against re-initialization of the singleton
-        if not self._initialized:
-            self.config = config or WandBConfig()
-            self.project = self.config.get_project()
-            self.entity = entity or self.config.get_entity()
-            self.api = api or wandb.Api()
-            
-            self.ENTITY_PROJECT = f"{self.entity}/{self.project}"
-
-            # Store available projects
-            self.projects_list = None
-            # Store available runs in configured project
-            self.project_runs = None
-            
-            # Mark as initialized
-            self.__class__._initialized = True
-
-    def load_projects(self) -> list:
-        """Get all available projects from WandB.
-        
-        Returns:
-            list: List of available projects
-        """
+    def summary(self) -> str:
+        return f"\nEntity: {self.entity}\nProject Id: {self.project_id} -> {self.project}\nRun Id: {self.run_id} -> {self.run}"
+    
+    def get_status(self) -> dict[str]:
+        return self.__dict__
+    
+    def load_projects(self, entity_name: str = None) -> list:
+        entity = entity_name or self.entity
         try:
-            print("WandBFacade: Attempting to load projects")
-            # Reset projects_list if it's None
-            if self.projects_list is None:
-                self.projects_list = [project.name for project in self.api.projects(entity=self.entity)]
-                print(f"WandBFacade: Projects loaded successfully: {self.projects_list is not None}")
+            print("Attempting to load projects...")
+
+            if self.projects_list is None or len(self.projects_list) == 0:
+                projects_list = [project.name for project in self._api.projects(entity)]
+
+                if projects_list is None:
+                    projects_list = []
+                    print("Either no projects in entity or loading projects failed.")
+                
+                print(f"Successfully loaded {len(projects_list)} projects.")
+                self.projects_list = projects_list
+                return projects_list
             else:
-                print("WandBFacade: Returning cached projects list")
-            return self.projects_list
-        
+                # return cached project list
+                return self.projects_list
         except wandb.errors.CommError as e:
-            print(f"WandBFacade: Network error while fetching projects: {e}")
             self.projects_list = None  # Reset on error
             raise ValueError(f"Network error while fetching projects: {e}") 
         except wandb.errors.Error as e:
-            print(f"WandBFacade: WandB API error: {e}")
             self.projects_list = None  # Reset on error
             raise ValueError(f"WandB API error: {e}")
         except Exception as e:
-            print(f"WandBFacade: Unexpected error: {e}")
             self.projects_list = None  # Reset on error
             raise ValueError(f"Unexpected error: {e}")
-
-    def load_runs_by_project(self, project_name: str = None) -> dict:
-        """Get all available runs within a project from WandB.
         
-        Args:
-            project_name: Name of the project to load runs from
-            
-        Returns:
-            list: List of available runs in a project
-        """
-        # Use provided project name or default to class project
-        entity_project = self.ENTITY_PROJECT
-        if project_name:
-            if project_name in self.projects_list:
-                entity_project = f"{self.entity}/{project_name}"
-            else:
-                raise ValueError(f"Project {project_name} not found in available projects")
+
+    def load_project_runs(self, project_name: str = None, entity_name: str = None) -> list:
+        entity = entity_name or self.entity
+        project = project_name or self.project
 
         try:
-            # always fetch fresh runs for the selected project
-            project_runs = [
+            print("Attempting to load project runs...")
+            
+            # load runs from API to compare with cached runs
+            loaded_runs = [
                 {"id": run.id, "name": run.name} 
-                for run in self.api.runs(entity_project, order="-created_at")
+                for run in self._api.runs(f'{entity}/{project}')
             ]
-            print(f"WandBFacade: Loaded {len(project_runs)} runs for project {project_name}")
-            return project_runs
+
+            if loaded_runs is None:
+                loaded_runs = []
+                print("Either no runs in project or loading runs failed.")
+            
+            # check if cached runs match loaded runs
+            if (self.project_runs is not None and 
+                set(tuple(run.items()) for run in self.project_runs) == 
+                set(tuple(run.items()) for run in loaded_runs)):
+                print("Using cached project runs list.")
+                return self.project_runs
+            else:
+                print(f"Successfully loaded {len(loaded_runs)} project runs.")
+                self.project_runs = loaded_runs
+                return loaded_runs
+
         except wandb.errors.CommError as e:
-            logging.error(f"Network error while fetching runs: {e}")
-            raise ValueError(f"Network error while fetching runs: {e}") 
+            self.project_runs = None  # Reset on error
+            raise ValueError(f"Network error while fetching project runs: {e}")
         except wandb.errors.Error as e:
-            logging.error(f"WandB API error: {e}")
+            self.project_runs = None  # Reset on error
             raise ValueError(f"WandB API error: {e}")
         except Exception as e:
-            logging.error(f"Unexpected error: {e}")
-            raise ValueError(f"Unexpected error: {e}")
-
-    def fetch_run(self, run_id: str = None):
-        """
-        Returns the run object from weights and biases for the particular run id.
-        Uses the configured value or the supplied argument value for run_id
-        """
-        if not run_id:
-            run_info = self.config.get_run()
-            if not run_info:
-                raise ValueError("No run configured. Please provide run_id or configure a run first.")
-            run_id = run_info[0]
-
+            self.project_runs = None  # Reset on error
+            raise ValueError(f"Unexpected error while fetching project runs: {e}")
+        
+    def fetch_project(self, project_name: str = None, entity_name: str = None) -> wandb.Api.project:
+        entity_name = entity_name or self.entity
+        if not project_name or (project_name != self.project_name):
+            try:
+                return self._api.project(project_name, entity_name)
+            except wandb.errors.CommError as e:
+                raise ValueError(f"Network error while fetching project: {e}")
+            except wandb.errors.Error as e:
+                raise ValueError(f"WandB API error: {e}")
+            except Exception as e:
+                raise ValueError(f"Unexpected error while fetching project: {e}")
+        else:
+            return self.project
+        
+    def fetch_run(self, run_id: str, project_name: str = None, entity_name: str =  None) -> wandb.Api.run:
+        entity_name = entity_name or self.entity
+        project_name = project_name or self.project_name
+        if not run_id or (run_id not in self.project_runs):
+            try:
+                return self._api.run(f'{entity_name}/{project_name}/{run_id}')
+            except wandb.errors.CommError as e:
+                raise ValueError(f"Network error while fetching run: {e}")
+            except wandb.errors.Error as e:
+                raise ValueError(f"WandB API error: {e}")
+            except Exception as e:
+                raise ValueError(f"Unexpected error while fetching run: {e}")
+        else:
+            return self.run
+        
+    def update_project(self, project_name: str) -> bool:
         try:
-            return self.api.run(f"{self.ENTITY_PROJECT}/{run_id}")
+            if project_name in self.projects_list:
+                fetched_project = self.fetch_project(project_name)
+                self.project = fetched_project
+                self.project_name = fetched_project.name
+                return True
+            else:
+                return False
+        except wandb.errors.CommError as e:
+            print(f"Network error while updating project: {e}")
+            raise ValueError(f"Failed to update project due to network error: {e}")
+        except wandb.errors.Error as e:
+            print(f"WandB API error while updating project: {e}")
+            raise ValueError(f"Failed to update project due to API error: {e}")
         except Exception as e:
-            print(e)
-            
-
-    def get_run_info(self):
-        """Get basic information about all runs in the project.
+            print(f"Unexpected error while updating project: {e}")
+            raise ValueError(f"Failed to update project due to unexpected error: {e}")
         
-        Returns:
-            list: List of dictionaries containing run ID, name and URL for each run
-        """
-        run_info = []
-        for run in self.project_runs:
-            run_info.append({
-                "id": run.id,
-                "name": run.name, 
-                "url": run.url
-            })
-        return run_info
-
-    def get_run_by_id(self, run_id: str):
-        """Get a specific run by its ID.
-        
-        Args:
-            run_id (str): The ID of the run to retrieve
-            
-        Returns:
-            Run: WandB Run object if found, None otherwise
-        """
-        if self.project_runs is not None:
-            for run in self.project_runs:
-                if run.get('id') == run_id:
-                    return self.fetch_run(run_id)
-        return None
-
-    def get_run_metrics(self, run_id: str = None) -> dict:
-        """Get metrics for a specific run.
-        
-        Args:
-            run_id (str, optional): The ID of the run to get metrics for. If not provided,
-                                  uses the currently configured run ID.
-            
-        Returns:
-            dict: Dictionary containing the run's metrics
-            
-        Raises:
-            ValueError: If run_id is invalid or no run is configured
-        """
-        # Use provided run_id or get from config
-        if not run_id:
-            run_info = self.config.get_run()
-            if not run_info:
-                raise ValueError("No run configured. Please provide run_id or configure a run first.")
-            run_id = run_info[0]
-            
-        # Get the run
-        run = self.get_run_by_id(run_id)
-        if not run:
-            raise ValueError(f"Run with ID {run_id} not found")
-            
-        return run.history()
-    
-    def set_run(self, run: dict) -> bool:
-        """Set the current run and save it to config.
-        
-        Args:
-            run (dict): Dictionary containing run information with 'id' and 'name' keys
-            
-        Returns:
-            bool: True if run was successfully set, False otherwise
-            
-        Raises:
-            ValueError: If run dictionary is missing required keys
-        """
-        if not run:
-            return False
-            
+    def update_run(self, run_id: str, project_name: str = None, entity_name: str = None) -> bool:
+        entity = entity_name or self.entity
+        project = project_name or self.project_name
         try:
-            if not isinstance(run, dict) or not all(key in run for key in ['id', 'name']):
-                raise ValueError("Run must be a dictionary containing 'id' and 'name' keys")
-                
-            self.config.set_run(run=run)
-            return True
-            
+            if run_id in self.project_runs:
+                fetched_run = self._api.run(f"{entity}/{project}/{run_id}")
+                self.run = fetched_run
+                self.run_id = fetched_run.id
+                self.run_name = fetched_run.name
+                self.run_config = fetched_run.config
+                return True
+            else:
+                return False
+        except wandb.errors.CommError as e:
+            print(f"Network error while updating run: {e}")
+            raise ValueError(f"Failed to update run due to network error: {e}")
+        except wandb.errors.Error as e:
+            print(f"WandB API error while updating run: {e}")
+            raise ValueError(f"Failed to update run due to API error: {e}")
         except Exception as e:
-            logging.error(f"Failed to set run: {e}")
-            return False
+            print(f"Unexpected error while updating run: {e}")
+            raise ValueError(f"Failed to update run due to unexpected error: {e}")
 
-    def fetch_model(self, project_name: str = None, run_id: str = None) -> dict:
-        """Fetch model configuration from a specific WandB run.
-        
-        If project_name and run_id are not provided, uses the currently configured run.
-        
-        Args:
-            project_name (str, optional): Name of the WandB project
-            run_id (str, optional): ID of the run to fetch
-            
-        Returns:
-            dict: Dictionary containing the model's configuration
-            
-        Raises:
-            ValueError: If run cannot be found or accessed
-        """
+    def fetch_model_config(self, run_id: str = None, project_name: str = None, entity_name: str = None) -> dict:
+        entity = entity_name or self.entity
+        project_name = project_name or self.project_name
+        run_id = run_id or self.run_id
+        run = self.run
         try:
-            
-            # Use provided values or fall back to configured values
-            if not project_name and not run_id:
-                run_info = self.config.get_run()
-                if not run_info or len(run_info) != 2:
-                    raise ValueError("No valid run configured. Please provide run_id and project_name or configure a run first.")
-                run_id = run_info[0]  # First element is run_id
-            # logging.info(f"Fetching WandB run: {run_path}")
-            
-            run = self.fetch_run(f"{self.ENTITY_PROJECT}/{run_id}")
+            if (run_id is not self.run_id) or (project_name is not self.project_name) or (entity_name is not self.entity):
+                run = self.fetch_run(run_id, project_name, entity)
             
             # Extract all relevant model information
             model_config = {
@@ -349,20 +305,16 @@ class WandBFacade:
             }
             
             if not model_config['model']['layers']:
-                raise ValueError(f"No layer configuration found in run {run_id}")
-                
-            logging.info(f"Successfully fetched model config for run: {run_id}")
-            return model_config
+                raise ValueError(f"No layer configuration found in run {run_id}: {run.name}")
 
+            print(f"Successfully fetched model config for run {run_id}: {run.name}")
+            return model_config
         except wandb.errors.CommError as e:
-            error_msg = f"Network error while fetching WandB run: {str(e)}"
-            logging.error(error_msg)
-            raise ValueError(error_msg)
+            print(f"Network error while fetching model config: {e}")
+            raise ValueError(f"Failed to fetch model config due to network error: {e}")
         except wandb.errors.Error as e:
-            error_msg = f"WandB API error: {str(e)}"
-            logging.error(error_msg)
-            raise ValueError(error_msg)
+            print(f"WandB API error while fetching model config: {e}")
+            raise ValueError(f"Failed to fetch model config due to API error: {e}")
         except Exception as e:
-            error_msg = f"Unexpected error while fetching model: {str(e)}"
-            logging.error(error_msg)
-            raise ValueError(error_msg)
+            print(f"Unexpected error while fetching model config: {e}")
+            raise ValueError(f"Failed to fetch model config due to unexpected error: {e}")
