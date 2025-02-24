@@ -125,28 +125,27 @@ class WandBFacade:
     
     Attributes:
         project_name (str): Current project name
-        project_id (str): Current project ID
         run_name (str): Current run name
         run_id (str): Current run ID
-        run_config (dict): Configuration of current run
         entity (str): W&B entity name (organization/username)
         projects_list (list): Cache of available projects
         project_runs (list): Cache of runs in current project
         runs_list (list): List of all runs
+        run_config (dict): Configuration of current run
         _api (wandb.Api): W&B API instance
         project (object): Current project object
         run (object): Current run object
     """
 
     project_name: str = None
-    project_id: str = None
     run_name: str = None
     run_id: str = None
-    run_config: dict = field(default_factory=dict)
+
     entity: str = field(default=STS)
     projects_list: list = field(default_factory=list)
     project_runs: list = field(default_factory=list)
     runs_list: list = field(default_factory=list)
+    run_config: dict = field(default_factory=dict)
     _api: wandb.Api = field(default_factory=wandb.Api)
 
     project: object = None
@@ -444,3 +443,65 @@ class WandBFacade:
         except Exception as e:
             print(f"Unexpected error while fetching model config: {e}")
             raise ValueError(f"Failed to fetch model config due to unexpected error: {e}")
+
+
+'''
+TODO:
+- Handle case where correct model config is not found in run
+'''
+
+
+"""
+# D2 diagram definition for WandBFacade class
+d2_wandb_facade
+
+direction: right
+
+WandBFacade: {
+  shape: class
+
+  # Fields
+  project_name: str
+  project_id: str 
+  run_name: str
+  run_id: str
+  entity: str
+  projects_list: list
+  project_runs: list
+  runs_list: list
+  _api: wandb.Api
+
+  # Methods
+  load_projects()
+  load_project_runs()
+  fetch_project()
+  fetch_run()
+  update_project() 
+  update_run()
+  fetch_model_config()
+}
+
+WandBConfig: {
+  shape: class
+
+  # Fields
+  __user_email: str
+  __entity: str
+  __project: str
+  __run_name: str
+  __run_id: str
+
+  # Methods
+  get_user_email()
+  set_user_email()
+  get_entity()
+  set_entity()
+  get_project()
+  set_project()
+  get_run()
+  set_run()
+  status()
+}
+
+WandBFacade -> WandBConfig: uses
+"""

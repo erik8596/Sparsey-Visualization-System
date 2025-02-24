@@ -8,7 +8,7 @@ wandbf = WandBFacade() # singleton instance
 @api.route('/projects', methods=['GET'])
 def get_projects():
     """
-    Retrieves all available W&B projects.
+    Retrieves all available W&B projects for default entity.
     Returns:
         200: JSON containing list of projects
         500: Error message if project loading fails
