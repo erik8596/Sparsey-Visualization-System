@@ -1,7 +1,14 @@
+// Global variables for Three.js scene and interaction
 let scene, camera, renderer, controls;
 let raycaster, mouse;
 let clickableMACs = []; // Composite MAC groups for click detection
 let selectedMACs = [];  // Global array for currently selected MAC groups
+
+// Create a shared offscreen renderer for side-panel snapshots.
+// This renderer is never added to the DOM, so we can reuse it.
+let sharedTopRenderer = new THREE.WebGLRenderer({ antialias: true });
+sharedTopRenderer.setSize(200, 200);
+sharedTopRenderer.setClearColor(0xffffff, 1);
 
 async function initialize() {
   await loadProjects();
@@ -73,6 +80,9 @@ async function loadRuns(project) {
 }
 
 async function loadRun() {
+  // Clear any existing side-panel elements and their WebGL contexts.
+  clearSidePanel();
+
   let runDropdown = document.getElementById('runSelect');
   if (runDropdown.selectedIndex < 1) {
     alert("Please select a run!");
@@ -167,6 +177,7 @@ function visualizeData(layers) {
         side: THREE.DoubleSide
       });
       const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
+      // Slightly offset fill mesh in the z-axis to avoid z-fighting
       fillMesh.position.z = -0.01;
       macGroup.add(fillMesh);
 
@@ -290,29 +301,47 @@ function onDocumentMouseClick(event) {
   mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
+
+  console.log("Mouse coords:", mouse);
+  console.log("Raycaster:", raycaster.ray);
+
   const intersects = raycaster.intersectObjects(clickableMACs, true);
+  console.log("Intersections:", intersects);
+
   if (intersects.length > 0) {
     const macGroup = getMACGroup(intersects[0].object);
-    if (macGroup) {
-      toggleMACSelection(macGroup);
+    console.log("getMACGroup result:", macGroup);
+    if (macGroup && macGroup.userData && macGroup.userData.type === "mac") {
+      try {
+        toggleMACSelection(macGroup);
+      } catch (error) {
+        console.error("Error toggling MAC selection:", error);
+      }
+    } else {
+      console.log("Clicked object is not a valid MAC group.");
     }
+  } else {
+    console.log("No intersections found.");
   }
 }
 
 function getMACGroup(object) {
+  console.log("getMACGroup initial object:", object);
   while (object) {
-    if (clickableMACs.includes(object)) {
+    if (clickableMACs.includes(object) && object.userData && object.userData.type === "mac") {
+      console.log("Found MAC group:", object);
       return object;
     }
     object = object.parent;
   }
+  console.log("No valid MAC group found.");
   return null;
 }
 
 function toggleMACSelection(macGroup) {
   const outlineLine = macGroup.userData.outlineLine;
   if (macGroup.userData.isSelected) {
-    // Deselect: revert outline color to black and lower the MAC back to its original z.
+    // Deselect: revert outline to black, lower MAC, and hide side-panel snapshot.
     outlineLine.material.color.set(0x000000);
     macGroup.position.z = macGroup.userData.originalZ;
     macGroup.userData.isSelected = false;
@@ -321,12 +350,15 @@ function toggleMACSelection(macGroup) {
       selectedMACs.splice(index, 1);
     }
     if (macGroup.userData.canvasWrapper) {
-      macGroup.userData.canvasWrapper.remove();
-      delete macGroup.userData.canvasWrapper;
+      macGroup.userData.canvasWrapper.style.display = "none";
     }
   } else {
-    // On selection: change outline to green and raise the MAC.
-    macGroup.userData.canvasWrapper = createMACCanvas(macGroup);
+    // On selection: create side-panel snapshot only if not already present.
+    if (!macGroup.userData.canvasWrapper) {
+      macGroup.userData.canvasWrapper = createMACCanvas(macGroup);
+    } else {
+      macGroup.userData.canvasWrapper.style.display = "block";
+    }
     outlineLine.material.color.set(0x008000);
     macGroup.position.z = macGroup.userData.originalZ + 0.2;
     macGroup.userData.isSelected = true;
@@ -335,25 +367,35 @@ function toggleMACSelection(macGroup) {
   const macData = macGroup.userData;
   let layer = (macData.z / 10) + 1;
   const detailsDiv = document.getElementById("mac-details");
-  detailsDiv.innerHTML = `<p><strong>Layer:</strong> ${layer.toFixed(1)}</p>`;
+  if (detailsDiv) {
+    detailsDiv.innerHTML = `<p><strong>Layer:</strong> ${layer.toFixed(1)}</p>`;
+  }
 }
 
 function resetToggledMACs() {
-  const macsToReset = selectedMACs.slice();
-  macsToReset.forEach(macGroup => {
+  // Reset selection for all selected MACs.
+  selectedMACs.forEach(macGroup => {
     if (macGroup.userData.isSelected) {
       macGroup.userData.outlineLine.material.color.set(0x000000);
       macGroup.position.z = macGroup.userData.originalZ;
       macGroup.userData.isSelected = false;
-      if (macGroup.userData.canvasWrapper) {
-        macGroup.userData.canvasWrapper.remove();
-        delete macGroup.userData.canvasWrapper;
-      }
     }
   });
   selectedMACs = [];
+
+  // Clear the details display if present.
   const detailsDiv = document.getElementById("mac-details");
-  detailsDiv.innerHTML = `<p><strong>Layer:</strong></p>`;
+  if (detailsDiv) {
+    detailsDiv.innerHTML = `<p><strong>Layer:</strong></p>`;
+  }
+
+  // Clear the entire side panel.
+  clearSidePanel();
+  
+  // Also clear the cached canvas wrapper references on all MAC groups.
+  clickableMACs.forEach(macGroup => {
+    macGroup.userData.canvasWrapper = null;
+  });
 }
 
 // --- Side Panel: MAC Canvas and Top View Functions ---
@@ -390,18 +432,19 @@ function createMACCanvas(macGroup) {
   return containerDiv;
 }
 
+// Use the sharedTopRenderer to render a top view snapshot offscreen,
+// then copy the resulting image to the provided canvas using its 2D context.
 function createTopView(macGroup, canvas) {
   const topScene = new THREE.Scene();
   topScene.background = new THREE.Color(0xffffff);
   
   const aspect = canvas.width / canvas.height;
   const viewSize = 5;
-  const topCamera = new THREE.OrthographicCamera(-viewSize * aspect, viewSize * aspect, viewSize, -viewSize, 0.1, 100);
+  const topCamera = new THREE.OrthographicCamera(
+    -viewSize * aspect, viewSize * aspect, viewSize, -viewSize, 0.1, 100
+  );
   topCamera.position.set(0, 0, 10);
   topCamera.lookAt(0, 0, 0);
-  
-  const topRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-  topRenderer.setSize(canvas.width, canvas.height);
   
   const compositeClone = macGroup.clone(true);
   resetOutlineColor(compositeClone);
@@ -410,7 +453,48 @@ function createTopView(macGroup, canvas) {
   compositeClone.position.set(0, 0, 0);
   topScene.add(compositeClone);
   
-  topRenderer.render(topScene, topCamera);
+  // Create a render target for the snapshot.
+  const renderTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height);
+  sharedTopRenderer.setRenderTarget(renderTarget);
+  sharedTopRenderer.render(topScene, topCamera);
+  sharedTopRenderer.setRenderTarget(null);
+  
+  // Read pixel data from the render target.
+  const pixelBuffer = new Uint8Array(canvas.width * canvas.height * 4);
+  sharedTopRenderer.readRenderTargetPixels(renderTarget, 0, 0, canvas.width, canvas.height, pixelBuffer);
+  
+  // Create a temporary 2D canvas to transfer the image.
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = canvas.width;
+  tempCanvas.height = canvas.height;
+  const tempCtx = tempCanvas.getContext('2d');
+  const imageData = tempCtx.createImageData(canvas.width, canvas.height);
+  imageData.data.set(pixelBuffer);
+  flipImageDataVertically(imageData);
+  tempCtx.putImageData(imageData, 0, 0);
+  
+  // Draw the snapshot onto the target canvas.
+  const ctx2d = canvas.getContext('2d');
+  ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+  ctx2d.drawImage(tempCanvas, 0, 0);
+  
+  renderTarget.dispose();
+}
+
+// Utility function to vertically flip ImageData
+function flipImageDataVertically(imageData) {
+  const width = imageData.width;
+  const height = imageData.height;
+  const halfHeight = Math.floor(height / 2);
+  const bytesPerRow = width * 4;
+  const temp = new Uint8Array(bytesPerRow);
+  for (let row = 0; row < halfHeight; row++) {
+    const topOffset = row * bytesPerRow;
+    const bottomOffset = (height - row - 1) * bytesPerRow;
+    temp.set(imageData.data.slice(topOffset, topOffset + bytesPerRow));
+    imageData.data.copyWithin(topOffset, bottomOffset, bottomOffset + bytesPerRow);
+    imageData.data.set(temp, bottomOffset);
+  }
 }
 
 function resetOutlineColor(group) {
@@ -471,6 +555,21 @@ function drawCircle(shape, radius) {
     }
   }
   shape.closePath();
+}
+
+function clearSidePanel() {
+  const sidePanel = document.getElementById("side-panel");
+  while (sidePanel.firstChild) {
+    let child = sidePanel.firstChild;
+    if (child instanceof HTMLElement && child.querySelector) {
+      const canvas = child.querySelector("canvas");
+      if (canvas && canvas._topRenderer) {
+        canvas._topRenderer.dispose();
+        delete canvas._topRenderer;
+      }
+    }
+    sidePanel.removeChild(child);
+  }
 }
 
 window.onload = initialize;
