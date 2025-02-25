@@ -1,0 +1,22 @@
+{
+  "name": "sparseypy_visualizer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:frontend": "mocha frontend-tests/**/*.mjs --timeout 60000",
+    "test:threejs": "PUPPETEER_DISABLE_CHROMIUM_STARTUP_WARNING=true mocha frontend-tests/**/*.mjs --grep 'Three.js' --timeout 60000 --allow-uncaught"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "chai": "^5.2.0",
+    "mocha": "^11.1.0",
+    "puppeteer": "^24.2.1"
+  }
+}

@@ -1,0 +1,37 @@
+import pytest
+from server import app
+
+@pytest.fixture
+def client():
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        yield client
+
+def test_index(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert b"Sparsey Visualization" in response.data
+
+def test_get_projects_route(client, mocker):
+    # Patch the get_projects function in server.py to return a dummy list.
+    fake_projects = [{"label": "Project1", "value": "Project1"}]
+    mocker.patch("server.get_projects", return_value=fake_projects)
+
+    response = client.get("/get_projects")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data == fake_projects
+
+def test_get_runs_route_missing_project(client):
+    # When the project name is missing, the endpoint should return a 400 error.
+    response = client.post("/get_runs", json={})
+    assert response.status_code == 400
+    data = response.get_json()
+    assert "error" in data
+
+def test_visualize_missing_run(client):
+    # When run_id is missing in the payload, the endpoint should return a 400 error.
+    response = client.post("/visualize", json={"project": "dummy_project"})
+    assert response.status_code == 400
+    data = response.get_json()
+    assert "error" in data
