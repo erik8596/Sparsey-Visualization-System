@@ -1,39 +1,37 @@
 let scene, camera, renderer, controls;
+let raycaster, mouse;
+let clickableMACs = []; // Composite MAC groups for click detection
+let selectedMACs = [];  // Global array for currently selected MAC groups
+let macGroups = [];    // Array to store all MAC groups
 
-// Initialize the application
 async function initialize() {
   await loadProjects();
 
-  // Event Listener for Project Selection
   document.getElementById('projectSelect').addEventListener('change', function () {
     let selectedProject = this.value;
     if (selectedProject) {
-      // Disable the visualize button and run dropdown until runs are loaded
       document.getElementById('visualizeButton').disabled = true;
       let runSelect = document.getElementById('runSelect');
       runSelect.disabled = true;
       runSelect.innerHTML = '<option value="" disabled selected>Loading runs...</option>';
-
       loadRuns(selectedProject);
     }
   });
+
+  const resetButton = document.getElementById("resetButton");
+  if (resetButton) {
+    resetButton.addEventListener("click", resetToggledMACs);
+  }
 }
 
-// Fetch and populate projects dropdown
 async function loadProjects() {
   try {
     let response = await fetch('/get_projects');
     let projects = await response.json();
-
-    if (projects.error) {
-      throw new Error(projects.error);
-    }
-
-    console.log("Fetched projects from Flask:", projects);  // Debugging log
-
+    if (projects.error) throw new Error(projects.error);
+    console.log("Fetched projects:", projects);
     let projectSelect = document.getElementById('projectSelect');
-    projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';  // Add placeholder
-
+    projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
     projects.forEach(project => {
       let option = document.createElement('option');
       option.value = project.value;
@@ -63,16 +61,10 @@ async function loadRuns(project) {
       body: JSON.stringify({ project })
     });
     let runs = await response.json();
-
-    if (runs.error) {
-      throw new Error(runs.error);
-    }
-
-    console.log("Fetched runs for project from Flask:", runs);  // Debugging log
-
+    if (runs.error) throw new Error(runs.error);
+    console.log("Fetched runs:", runs);
     let runSelect = document.getElementById('runSelect');
-    runSelect.innerHTML = '<option value="" disabled selected>Select a run</option>';  // Add placeholder
-
+    runSelect.innerHTML = '<option value="" disabled selected>Select a run</option>';
     runs.forEach(run => {
       let option = document.createElement('option');
       option.value = run.value;
@@ -156,7 +148,9 @@ async function loadRun() {
     while (scene.children.length > 0) {
       scene.remove(scene.children[0]);
     }
-
+    clickableMACs = [];
+    selectedMACs = [];
+    macGroups = [];
     // First visualize the network layers
     if (layers) {
       visualizeData(layers, false); // Pass false to prevent scene clearing
@@ -182,24 +176,22 @@ async function loadRun() {
 // Initialize Three.js scene and components
 function initializeScene() {
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xffffff);  // Set white background
-
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  scene.background = new THREE.Color(0xffffff);
+  const container = document.getElementById('threejs-container');
+  camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
   camera.position.set(0, 0, 50);
-
   renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.getElementById('threejs-container').appendChild(renderer.domElement);
-
-  // Add orbit controls for zoom and pan
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  container.appendChild(renderer.domElement);
   controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
   controls.maxDistance = 200;
   controls.screenSpacePanning = false;
-
-  // Handle window resize
   window.addEventListener('resize', onWindowResize, false);
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+  renderer.domElement.addEventListener('click', onDocumentMouseClick, false);
 }
 
 // Visualize the data using Three.js
@@ -219,30 +211,92 @@ function visualizeData(layers, clearScene = true) {
   const mac_spacing = 1.33;  // Increase spacing between MACs
 
   layers.forEach(element => {
-    let shape, material, points, lineGeometry, line;
-
     if (element.type === "mac") {
-      shape = new THREE.Shape();
-      drawHexagon(shape, 2.0);  // Adjust MAC size here
-      let color = element.active ? 0x800080 : 0x0000ff;
-      material = new THREE.LineBasicMaterial({ color: color, linewidth: 1 });  // Thin purple line
-      // material = new THREE.LineBasicMaterial({ color: 0x0000ff, linewidth: 1 });  // Thin blue line
-    } else if (element.type === "cm") {
-      shape = new THREE.Shape();
-      drawHexagon(shape, 0.5);  // Adjust CM size here
-      material = new THREE.LineBasicMaterial({ color: 0x008000, linewidth: 1 });  // Thin green line
-    } else if (element.type === "neuron") {
-      shape = new THREE.Shape();
-      drawCircle(shape, 0.10);  // Adjust neuron size here
-      material = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });  // Thin black line
-    }
+      const macGroup = new THREE.Group();
+      const shape = new THREE.Shape();
+      drawHexagon(shape, 2.0);
+      const geometry = new THREE.ShapeGeometry(shape);
 
-    // Convert shape to line geometry
-    points = shape.getPoints();
-    lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
-    line = new THREE.LineLoop(lineGeometry, material);
-    line.position.set(element.x, element.y * mac_spacing, element.z);
-    scene.add(line);
+      // Store the active state in userData
+      macGroup.userData = {
+        ...element,
+        geometry: geometry,
+        type: "mac"
+      };
+
+      // Create the outline with color based on activation state
+      const points = shape.getPoints();
+      const outlineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+
+      // Set outline color based on active property from backend
+      const outlineMaterial = new THREE.LineBasicMaterial({
+        color: element.active ? 0x800080 : 0x000000, // Purple if active, black if not
+        linewidth: 1
+      });
+
+      const outlineLine = new THREE.LineLoop(outlineGeometry, outlineMaterial);
+      outlineLine.userData = {
+        type: "mac_outline",
+        active: element.active
+      };
+
+      macGroup.add(outlineLine);
+      macGroup.userData.outlineLine = outlineLine;
+      macGroup.userData.originalZ = element.z;
+      macGroup.position.set(element.x, element.y * mac_spacing, element.z);
+
+      scene.add(macGroup);
+      clickableMACs.push(macGroup);
+      macGroups.push(macGroup);
+    }
+  });
+
+  // Now, for each element that is a "cm" or "neuron", add it as a child to the nearest MAC group (if it belongs there)
+  layers.forEach(element => {
+    if (element.type === "cm" || element.type === "neuron") {
+      let object;
+      if (element.type === "cm") {
+        const shape = new THREE.Shape();
+        drawHexagon(shape, 0.5);
+        const points = shape.getPoints();
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        // Set CMs to blue (0x0000FF)
+        const material = new THREE.LineBasicMaterial({ color: 0x0000FF, linewidth: 2 });
+        object = new THREE.LineLoop(geometry, material);
+      } else if (element.type === "neuron") {
+        const shape = new THREE.Shape();
+        drawCircle(shape, 0.10);
+        const points = shape.getPoints();
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
+        object = new THREE.LineLoop(geometry, material);
+      }
+      object.userData = element;
+      object.userData.type = element.type;
+      // Set object's world position
+      object.position.set(element.x, element.y * mac_spacing, element.z);
+      // Find the nearest MAC group with an identical z (i.e. same layer)
+      let closestMac = null;
+      let minDistance = Infinity;
+      macGroups.forEach(macGroup => {
+        if (Math.abs(macGroup.position.z - object.position.z) < 0.001) {
+          const dx = macGroup.position.x - object.position.x;
+          const dy = macGroup.position.y - object.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestMac = macGroup;
+          }
+        }
+      });
+      if (closestMac) {
+        // Convert object's world position to local position relative to its MAC group
+        object.position.sub(closestMac.position);
+        closestMac.add(object);
+      } else {
+        scene.add(object);
+      }
+    }
   });
   //createInputGrid(); // Creating the input grid
   animate();
@@ -285,21 +339,210 @@ function createInputGrid(cols, rows) {
 }
 
 // Handle window resize
+// function onWindowResize() {
+//   camera.aspect = window.innerWidth / window.innerHeight;
+//   camera.updateProjectionMatrix();
+
+//   renderer.setSize(window.innerWidth, window.innerHeight);
+// }
 function onWindowResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const container = document.getElementById('threejs-container');
+  camera.aspect = container.clientWidth / container.clientHeight;
   camera.updateProjectionMatrix();
-
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(container.clientWidth, container.clientHeight);
 }
-
 // Animation loop
+
 function animate() {
   requestAnimationFrame(animate);
   controls.update();
   renderer.render(scene, camera);
 }
 
-// Function to draw a hexagon outline
+function getMACGroup(object) {
+  while (object) {
+    if (clickableMACs.includes(object)) {
+      return object;
+    }
+    object = object.parent;
+  }
+  return null;
+}
+
+// Create a side-panel container that includes a top view canvas and a bar graph canvas
+function createMACCanvas(macGroup) {
+  const containerDiv = document.createElement("div");
+  containerDiv.classList.add("mac-canvas-wrapper");
+  // If no dynamic canvas exists yet in the side panel, add extra top margin
+  const sidePanel = document.getElementById("side-panel");
+  containerDiv.style.marginBottom = "10px";
+
+  const label = document.createElement("p");
+  label.textContent = `MAC - Layer: ${((macGroup.userData.z / 10) + 1).toFixed(1)}`;
+  label.style.margin = "0 0 5px 0";
+  containerDiv.appendChild(label);
+
+  // Top view canvas
+  const topCanvas = document.createElement("canvas");
+  topCanvas.width = 200;
+  topCanvas.height = 200;
+  topCanvas.style.border = "2px solid #ccc";
+  containerDiv.appendChild(topCanvas);
+
+  // Bar graph canvas (for activation probabilities)
+  const barGraphCanvas = document.createElement("canvas");
+  barGraphCanvas.width = 200;
+  barGraphCanvas.height = 100; // adjust height as needed
+  barGraphCanvas.style.border = "1px solid #ccc";
+  barGraphCanvas.style.marginTop = "5px";
+  containerDiv.appendChild(barGraphCanvas);
+
+  sidePanel.appendChild(containerDiv);
+
+  // Render the top view using a composite clone from BEFORE outline change:
+  createTopView(macGroup, topCanvas);
+  // Render the dummy bar graph
+  renderBarGraph(macGroup, barGraphCanvas);
+
+  return containerDiv;
+}
+
+// Create a top-down view of the composite MAC group on the given canvas
+function createTopView(macGroup, canvas) {
+  const topScene = new THREE.Scene();
+  topScene.background = new THREE.Color(0xffffff);
+
+  const aspect = canvas.width / canvas.height;
+  const viewSize = 5;
+  const topCamera = new THREE.OrthographicCamera(-viewSize * aspect, viewSize * aspect, viewSize, -viewSize, 0.1, 100);
+  topCamera.position.set(0, 0, 10);
+  topCamera.lookAt(0, 0, 0);
+
+  const topRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  topRenderer.setSize(canvas.width, canvas.height);
+
+  // Deep clone the composite MAC group
+  const compositeClone = macGroup.clone(true);
+  // Reset the outline color ONLY for the MAC's own outline (marked with userData.type === "mac_outline")
+  resetOutlineColor(compositeClone);
+  // Scale up the clone to make it appear larger in the canvas.
+  const scaleFactor = 1.5;  // Adjust this factor as needed.
+  compositeClone.scale.set(scaleFactor, scaleFactor, scaleFactor);
+  // Center the clone in the top view
+  compositeClone.position.set(0, 0, 0);
+  topScene.add(compositeClone);
+
+  topRenderer.render(topScene, topCamera);
+}
+
+// Traverse a cloned group and reset only the MAC outline to black,
+// leaving other child colors (like CM's blue) unchanged.
+function resetOutlineColor(group) {
+  group.traverse(child => {
+    if (child.isLine && child.material && child.material.color && child.userData && child.userData.type === "mac_outline") {
+      child.material.color.set(0x000000);
+    }
+  });
+}
+
+// Render a dummy bar graph for activation probabilities in the given canvas.
+// This dummy graph draws three bars with fixed sample values.
+function renderBarGraph(macGroup, canvas) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Sample data for three bars (values between 0 and 1)
+  const sampleData = [0.8, 0.3, 0.6];
+  const barWidth = (canvas.width - 20) / sampleData.length; // leave some margin
+  const maxBarHeight = canvas.height - 20;
+
+  // Draw bars
+  sampleData.forEach((value, index) => {
+    const barHeight = value * maxBarHeight;
+    const x = 10 + index * barWidth;
+    const y = canvas.height - barHeight - 10; // leave margin at bottom
+
+    // Draw the bar (blue color)
+    ctx.fillStyle = '#007bff';
+    ctx.fillRect(x, y, barWidth - 5, barHeight);
+
+    // Optionally draw a border
+    ctx.strokeStyle = '#000';
+    ctx.strokeRect(x, y, barWidth - 5, barHeight);
+
+    // Draw label below the bar
+    ctx.fillStyle = '#000';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Bar ${index + 1}`, x + (barWidth - 5) / 2, canvas.height - 2);
+  });
+}
+
+function onDocumentMouseClick(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(clickableMACs, true);
+  if (intersects.length > 0) {
+    const macGroup = getMACGroup(intersects[0].object);
+    if (macGroup) {
+      toggleMACSelection(macGroup);
+    }
+  }
+}
+
+// Toggle a MAC's selection state. When selecting, create the side-panel clone before changing the main scene's outline.
+function toggleMACSelection(macGroup) {
+  const outlineLine = macGroup.userData.outlineLine;
+  if (macGroup.userData.isSelected) {
+    // Deselect: revert to original color based on active state
+    outlineLine.material.color.set(macGroup.userData.active ? 0x800080 : 0x000000);
+    macGroup.position.z = macGroup.userData.originalZ;
+    macGroup.userData.isSelected = false;
+    const index = selectedMACs.indexOf(macGroup);
+    if (index !== -1) {
+      selectedMACs.splice(index, 1);
+    }
+    if (macGroup.userData.canvasWrapper) {
+      macGroup.userData.canvasWrapper.remove();
+      delete macGroup.userData.canvasWrapper;
+    }
+  } else {
+    // Select: create side-panel and change color to green
+    macGroup.userData.canvasWrapper = createMACCanvas(macGroup);
+    outlineLine.material.color.set(0x008000);
+    macGroup.position.z = macGroup.userData.originalZ + 0.2;
+    macGroup.userData.isSelected = true;
+    selectedMACs.push(macGroup);
+  }
+  const macData = macGroup.userData;
+  let layer = (macData.z / 10) + 1;
+  const detailsDiv = document.getElementById("mac-details");
+  detailsDiv.innerHTML = `<p><strong>Layer:</strong> ${layer.toFixed(1)}</p>`;
+}
+
+function resetToggledMACs() {
+  const macsToReset = selectedMACs.slice();
+  macsToReset.forEach(macGroup => {
+    if (macGroup.userData.isSelected) {
+      // Reset to original color based on active state
+      macGroup.userData.outlineLine.material.color.set(
+        macGroup.userData.active ? 0x800080 : 0x000000
+      );
+      macGroup.position.z = macGroup.userData.originalZ;
+      macGroup.userData.isSelected = false;
+      if (macGroup.userData.canvasWrapper) {
+        macGroup.userData.canvasWrapper.remove();
+        delete macGroup.userData.canvasWrapper;
+      }
+    }
+  });
+  selectedMACs = [];
+  const detailsDiv = document.getElementById("mac-details");
+  detailsDiv.innerHTML = `<p><strong>Layer:</strong></p>`;
+}
+
 function drawHexagon(shape, size) {
   for (let i = 0; i < 6; i++) {
     let angle = (Math.PI / 3) * i;

@@ -36,6 +36,6 @@ def neuron_centers(center_x, center_y, radius, num_neurons):
     if num_neurons == 1:
         return [(center_x, center_y)]
     angles = np.linspace(0, 2 * np.pi, num_neurons, endpoint=False)
-    offsets = np.stack([np.cos(angles), np.sin(angles)]) * 2 * radius
+    offsets = np.stack([np.cos(angles), np.sin(angles)]) * .2 * radius
     centers = np.array([center_x, center_y])[:, None] + offsets
     return centers.T

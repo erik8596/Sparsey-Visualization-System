@@ -1,39 +1,80 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sparsey Visualization</title>
-    <!-- Three.js Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- OrbitControls for Three.js -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sparsey Visualization</title>
+  <!-- Three.js Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- OrbitControls for Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/static/css/styles.css" />
+  <style>
+    /* Position the MAC Details header, reset button, and message in the header area */
+    #mac-details-container {
+      position: absolute;
+      top: 35px;      /* Adjust down as needed */
+      right: 15px;    /* Adjust left as needed */
+      text-align: center;
+    }
+    /* Flex container to place header and reset button on the same line */
+    #mac-details-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    #mac-details-header {
+      font-size: 1.3em;
+      font-weight: bold;
+      margin: 0;
+    }
+    #resetButton {
+      padding: 3px 7px;
+      font-size: 0.8em;
+    }
+    #mac-details-msg {
+      font-style: italic;
+      font-size: 0.8em;
+      margin-top: 3px;
+    }
+  </style>
 </head>
 <body>
+  <header>
     <h1>Sparsey Visualization</h1>
-
-    <!-- Project Selection -->
-    <label for="projectSelect">Select W&B Project:</label>
-    <select id="projectSelect">
+    <!-- Project and Run Selection -->
+    <div class="controls">
+      <label for="projectSelect">Select W&B Project:</label>
+      <select id="projectSelect">
         <option value="" disabled selected>Loading projects...</option>
-    </select>
-
-    <!-- Run Selection -->
-    <label for="runSelect">Select W&B Run:</label>
-    <select id="runSelect" disabled>
+      </select>
+      <label for="runSelect">Select W&B Run:</label>
+      <select id="runSelect" disabled>
         <option value="" disabled selected>Select a project first</option>
-    </select>
+      </select>
+      <button id="visualizeButton" onclick="loadRun()" disabled>Visualize</button>
+    </div>
+    <!-- MAC Details, Reset Button, and Instruction Message Container -->
+    <div id="mac-details-container">
+      <div id="mac-details-row">
+        <div id="mac-details-header">MAC Details</div>
+        <button id="resetButton">Reset Toggled MACs</button>
+      </div>
+      <div id="mac-details-msg">Click on a MAC to see its details</div>
+    </div>
+  </header>
 
-    <button onclick="loadRun()" disabled id="visualizeButton">Visualize</button>
-
-    <!-- TODO: Adding an indicator to indicate the current loaded run to prevent confusion-->
-    <!-- <label for="loadedRun">Loaded Run:</label>
-    <textarea name="loadedRun" id="loadedRunArea">N/A</textarea> -->
-
+  <main>
+    <!-- Container for the main Three.js scene -->
     <div id="threejs-container"></div>
+    <!-- Side panel for dynamic canvases (without the message) -->
+    <div id="side-panel">
+      <!-- Additional side panel content can go here -->
+    </div>
+  </main>
 
-    <script src="/static/js/main.js"></script>
+  <script src="/static/js/main.js"></script>
 </body>
 </html>

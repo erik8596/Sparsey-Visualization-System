@@ -10,6 +10,9 @@ __pycache__/
 # vs code
 .vscode/
 
+# python init files
+__init__.py
+
 # env
 .env
 .DS_Storevenv/

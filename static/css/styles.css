@@ -22,3 +22,79 @@ button {
   margin-top: 20px;
   border: 1px solid #ccc;
 }
+
+/* Reset some default spacing */
+body, html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Arial, sans-serif;
+}
+
+/* Header styles */
+header {
+  padding: 10px;
+  background-color: #f2f2f2;
+  border-bottom: 1px solid #ddd;
+}
+
+header h1 {
+  margin: 0 0 10px;
+}
+
+/* Controls styling */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Main container holds both the Three.js scene and the side panel */
+main {
+  display: flex;
+  height: calc(100% - 80px); /* Adjust based on header height */
+}
+
+/* Three.js container styles */
+#threejs-container {
+  flex: 1;
+  background-color: #eaeaea;
+  position: relative;
+}
+
+/* Side panel styles */
+#side-panel {
+  width: 300px; /* Initial width */
+  padding: 20px;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  border-left: 1px solid #ccc;
+  overflow-y: auto;
+}
+
+#side-panel h2 {
+  margin-top: 0;
+}
+
+#mac-details {
+  margin-bottom: 10px;
+  line-height: 1.5;
+  color: #333;
+}
+
+/* Top view canvas styles */
+#topview-canvas {
+  width: 200px;
+  height: 200px;
+  display: block;
+  margin: 0 auto;
+  border: 1px solid #ccc;
+}
+
+/* Dividing lines between dynamic canvas containers */
+.mac-canvas-wrapper {
+  border-bottom: 3px solid #ccc;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
