@@ -360,7 +360,7 @@ function toggleMACSelection(macGroup) {
       macGroup.userData.canvasWrapper.style.display = "block";
     }
     outlineLine.material.color.set(0x008000);
-    macGroup.position.z = macGroup.userData.originalZ + 0.2;
+    macGroup.position.z = macGroup.userData.originalZ + 0.5;
     macGroup.userData.isSelected = true;
     selectedMACs.push(macGroup);
   }
