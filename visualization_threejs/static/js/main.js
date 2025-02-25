@@ -290,6 +290,9 @@ function createTopView(macGroup, canvas) {
   const compositeClone = macGroup.clone(true);
   // Reset the outline color ONLY for the MAC's own outline (marked with userData.type === "mac_outline")
   resetOutlineColor(compositeClone);
+  // Scale up the clone to make it appear larger in the canvas.
+  const scaleFactor = 1.5;  // Adjust this factor as needed.
+  compositeClone.scale.set(scaleFactor, scaleFactor, scaleFactor);
   // Center the clone in the top view
   compositeClone.position.set(0, 0, 0);
   topScene.add(compositeClone);
@@ -426,7 +429,7 @@ function drawHexagon(shape, size) {
 }
 
 function drawCircle(shape, radius) {
-  const numSegments = 50;
+  const numSegments = 20;
   for (let i = 0; i < numSegments; i++) {
     let angle = (Math.PI * 2 / numSegments) * i;
     let x = radius * Math.cos(angle);
