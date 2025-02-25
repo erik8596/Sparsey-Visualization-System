@@ -97,14 +97,24 @@ async function loadRun() {
       alert("Error: " + data.error);
       return;
     }
+    
+    // Visualize network layers (MACs, CMs, neurons, etc.)
     visualizeData(data.layers);
+    
+    // Create the input grid using provided input dimensions
+    if (data.input_dimensions && data.input_dimensions.width && data.input_dimensions.height) {
+      createInputGrid(data.input_dimensions.width, data.input_dimensions.height);
+    } else {
+      console.error("❌ Invalid input dimensions:", data.input_dimensions);
+    }
   } catch (error) {
     console.error("Error during visualization:", error);
     alert("Failed to visualize the run.");
   }
 }
 
-// Build the scene with composite MAC groups
+// --- Scene Setup and Render Functions ---
+
 function visualizeData(layers) {
   if (scene) {
     while (scene.children.length > 0) {
@@ -131,28 +141,45 @@ function visualizeData(layers) {
     mouse = new THREE.Vector2();
     renderer.domElement.addEventListener('click', onDocumentMouseClick, false);
   }
-
+  
   const mac_spacing = 1.33;
   let macGroups = [];
-
-  // First, create composite MAC groups for elements with type "mac"
+  
+  // Create composite MAC groups from elements of type "mac"
   layers.forEach(element => {
     if (element.type === "mac") {
+      console.log("MAC active:", element.active); // Debug log
       const macGroup = new THREE.Group();
       const shape = new THREE.Shape();
-      drawHexagon(shape, 2.0);
-      const geometry = new THREE.ShapeGeometry(shape);
-      macGroup.userData = element;
-      macGroup.userData.geometry = geometry;
-      macGroup.userData.type = "mac";
-      // Create the black outline and mark it as the MAC outline
+      drawHexagon(shape, 2.0); // Adjust MAC size as needed
+
+      // Create a fill mesh:
+      const fillGeometry = new THREE.ShapeGeometry(shape);
+      // Use light red fill if active, otherwise transparent.
+      // Explicitly check if active equals true or equals 1.
+      const isActive = (element.active === true || element.active === 1);
+      const fillColor = 0xffcccc; 
+      const fillOpacity = isActive ? 1.0 : 0.0;
+      const fillMaterial = new THREE.MeshBasicMaterial({
+        color: fillColor,
+        transparent: true,
+        opacity: fillOpacity,
+        side: THREE.DoubleSide
+      });
+      const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
+      macGroup.add(fillMesh);
+
+      // Create an outline using LineLoop with black color
       const points = shape.getPoints();
       const outlineGeometry = new THREE.BufferGeometry().setFromPoints(points);
       const outlineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
       const outlineLine = new THREE.LineLoop(outlineGeometry, outlineMaterial);
       outlineLine.userData = { type: "mac_outline" };
       macGroup.add(outlineLine);
+      
+      macGroup.userData = element;
       macGroup.userData.outlineLine = outlineLine;
+      macGroup.userData.fillMesh = fillMesh;
       macGroup.userData.originalZ = element.z;
       macGroup.position.set(element.x, element.y * mac_spacing, element.z);
       scene.add(macGroup);
@@ -160,8 +187,8 @@ function visualizeData(layers) {
       macGroups.push(macGroup);
     }
   });
-
-  // Now, for each element that is a "cm" or "neuron", add it as a child to the nearest MAC group (if it belongs there)
+  
+  // Attach "cm" and "neuron" elements to the nearest MAC group
   layers.forEach(element => {
     if (element.type === "cm" || element.type === "neuron") {
       let object;
@@ -170,7 +197,6 @@ function visualizeData(layers) {
         drawHexagon(shape, 0.5);
         const points = shape.getPoints();
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        // Set CMs to blue (0x0000FF)
         const material = new THREE.LineBasicMaterial({ color: 0x0000FF, linewidth: 2 });
         object = new THREE.LineLoop(geometry, material);
       } else if (element.type === "neuron") {
@@ -183,9 +209,7 @@ function visualizeData(layers) {
       }
       object.userData = element;
       object.userData.type = element.type;
-      // Set object's world position
       object.position.set(element.x, element.y * mac_spacing, element.z);
-      // Find the nearest MAC group with an identical z (i.e. same layer)
       let closestMac = null;
       let minDistance = Infinity;
       macGroups.forEach(macGroup => {
@@ -200,7 +224,6 @@ function visualizeData(layers) {
         }
       });
       if (closestMac) {
-        // Convert object's world position to local position relative to its MAC group
         object.position.sub(closestMac.position);
         closestMac.add(object);
       } else {
@@ -209,6 +232,41 @@ function visualizeData(layers) {
     }
   });
   animate();
+}
+
+// Create the input grid (the input layer) based on columns and rows.
+function createInputGrid(cols, rows) {
+  const hexSize = 2.0;
+  const macSpacing = 3.0;
+  const zOffset = -10; // Place the input grid behind the network layers
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = col * macSpacing;
+      let y = row * Math.sqrt(3) * hexSize;
+      if (col % 2 !== 0) {
+        y += (Math.sqrt(3) * hexSize) / 2;
+      }
+      // Create a hexagon for the input grid cell using createHexagon
+      const cellHex = createHexagon(hexSize, 0x0000ff);
+      cellHex.position.set(
+        x - ((cols - 1) * macSpacing) / 2,
+        y - ((rows - 1) * Math.sqrt(3) * hexSize) / 2,
+        zOffset
+      );
+      scene.add(cellHex);
+    }
+  }
+}
+
+// Create a hexagon mesh given a size and color.
+function createHexagon(size, color) {
+  const shape = new THREE.Shape();
+  drawHexagon(shape, size);
+  const geometry = new THREE.BufferGeometry();
+  const points = shape.getPoints();
+  geometry.setFromPoints(points);
+  const material = new THREE.LineBasicMaterial({ color: color, linewidth: 1 });
+  return new THREE.LineLoop(geometry, material);
 }
 
 function onWindowResize() {
@@ -224,124 +282,7 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-function getMACGroup(object) {
-  while (object) {
-    if (clickableMACs.includes(object)) {
-      return object;
-    }
-    object = object.parent;
-  }
-  return null;
-}
-
-// Create a side-panel container that includes a top view canvas and a bar graph canvas
-function createMACCanvas(macGroup) {
-  const containerDiv = document.createElement("div");
-  containerDiv.classList.add("mac-canvas-wrapper");
-  // If no dynamic canvas exists yet in the side panel, add extra top margin
-  const sidePanel = document.getElementById("side-panel");
-  containerDiv.style.marginBottom = "10px";
-
-  const label = document.createElement("p");
-  label.textContent = `MAC - Layer: ${((macGroup.userData.z / 10) + 1).toFixed(1)}`;
-  label.style.margin = "0 0 5px 0";
-  containerDiv.appendChild(label);
-
-  // Top view canvas
-  const topCanvas = document.createElement("canvas");
-  topCanvas.width = 200;
-  topCanvas.height = 200;
-  topCanvas.style.border = "2px solid #ccc";
-  containerDiv.appendChild(topCanvas);
-
-  // Bar graph canvas (for activation probabilities)
-  const barGraphCanvas = document.createElement("canvas");
-  barGraphCanvas.width = 200;
-  barGraphCanvas.height = 100; // adjust height as needed
-  barGraphCanvas.style.border = "1px solid #ccc";
-  barGraphCanvas.style.marginTop = "5px";
-  containerDiv.appendChild(barGraphCanvas);
-
-  sidePanel.appendChild(containerDiv);
-
-  // Render the top view using a composite clone from BEFORE outline change:
-  createTopView(macGroup, topCanvas);
-  // Render the dummy bar graph
-  renderBarGraph(macGroup, barGraphCanvas);
-
-  return containerDiv;
-}
-
-// Create a top-down view of the composite MAC group on the given canvas
-function createTopView(macGroup, canvas) {
-  const topScene = new THREE.Scene();
-  topScene.background = new THREE.Color(0xffffff);
-
-  const aspect = canvas.width / canvas.height;
-  const viewSize = 5;
-  const topCamera = new THREE.OrthographicCamera(-viewSize * aspect, viewSize * aspect, viewSize, -viewSize, 0.1, 100);
-  topCamera.position.set(0, 0, 10);
-  topCamera.lookAt(0, 0, 0);
-
-  const topRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-  topRenderer.setSize(canvas.width, canvas.height);
-
-  // Deep clone the composite MAC group
-  const compositeClone = macGroup.clone(true);
-  // Reset the outline color ONLY for the MAC's own outline (marked with userData.type === "mac_outline")
-  resetOutlineColor(compositeClone);
-  // Scale up the clone to make it appear larger in the canvas.
-  const scaleFactor = 1.5;  // Adjust this factor as needed.
-  compositeClone.scale.set(scaleFactor, scaleFactor, scaleFactor);
-  // Center the clone in the top view
-  compositeClone.position.set(0, 0, 0);
-  topScene.add(compositeClone);
-
-  topRenderer.render(topScene, topCamera);
-}
-
-// Traverse a cloned group and reset only the MAC outline to black,
-// leaving other child colors (like CM's blue) unchanged.
-function resetOutlineColor(group) {
-  group.traverse(child => {
-    if (child.isLine && child.material && child.material.color && child.userData && child.userData.type === "mac_outline") {
-      child.material.color.set(0x000000);
-    }
-  });
-}
-
-// Render a dummy bar graph for activation probabilities in the given canvas.
-// This dummy graph draws three bars with fixed sample values.
-function renderBarGraph(macGroup, canvas) {
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Sample data for three bars (values between 0 and 1)
-  const sampleData = [0.8, 0.3, 0.6];
-  const barWidth = (canvas.width - 20) / sampleData.length; // leave some margin
-  const maxBarHeight = canvas.height - 20;
-  
-  // Draw bars
-  sampleData.forEach((value, index) => {
-    const barHeight = value * maxBarHeight;
-    const x = 10 + index * barWidth;
-    const y = canvas.height - barHeight - 10; // leave margin at bottom
-    
-    // Draw the bar (blue color)
-    ctx.fillStyle = '#007bff';
-    ctx.fillRect(x, y, barWidth - 5, barHeight);
-    
-    // Optionally draw a border
-    ctx.strokeStyle = '#000';
-    ctx.strokeRect(x, y, barWidth - 5, barHeight);
-    
-    // Draw label below the bar
-    ctx.fillStyle = '#000';
-    ctx.font = '10px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(`Bar ${index+1}`, x + (barWidth - 5)/2, canvas.height - 2);
-  });
-}
+// --- Mouse Interaction and Side Panel Functions ---
 
 function onDocumentMouseClick(event) {
   const rect = renderer.domElement.getBoundingClientRect();
@@ -357,11 +298,20 @@ function onDocumentMouseClick(event) {
   }
 }
 
-// Toggle a MAC's selection state. When selecting, create the side-panel clone before changing the main scene's outline.
+function getMACGroup(object) {
+  while (object) {
+    if (clickableMACs.includes(object)) {
+      return object;
+    }
+    object = object.parent;
+  }
+  return null;
+}
+
 function toggleMACSelection(macGroup) {
   const outlineLine = macGroup.userData.outlineLine;
   if (macGroup.userData.isSelected) {
-    // Deselect: revert outline color and position, remove side-panel container
+    // Deselect: revert outline color to black and lower the MAC back to its original z.
     outlineLine.material.color.set(0x000000);
     macGroup.position.z = macGroup.userData.originalZ;
     macGroup.userData.isSelected = false;
@@ -374,9 +324,8 @@ function toggleMACSelection(macGroup) {
       delete macGroup.userData.canvasWrapper;
     }
   } else {
-    // Before changing the MAC's outline, create the side-panel composite clone.
+    // On selection: change outline to green and raise the MAC.
     macGroup.userData.canvasWrapper = createMACCanvas(macGroup);
-    // Now change the outline and raise the MAC in the main scene.
     outlineLine.material.color.set(0x008000);
     macGroup.position.z = macGroup.userData.originalZ + 0.2;
     macGroup.userData.isSelected = true;
@@ -389,30 +338,110 @@ function toggleMACSelection(macGroup) {
 }
 
 function resetToggledMACs() {
-  // Make a copy of the currently selected MACs
   const macsToReset = selectedMACs.slice();
   macsToReset.forEach(macGroup => {
     if (macGroup.userData.isSelected) {
-      // Reset the outline color to black
       macGroup.userData.outlineLine.material.color.set(0x000000);
-      // Reset the position
       macGroup.position.z = macGroup.userData.originalZ;
-      // Mark as deselected
       macGroup.userData.isSelected = false;
-      // Remove the side-panel canvas if it exists
       if (macGroup.userData.canvasWrapper) {
         macGroup.userData.canvasWrapper.remove();
         delete macGroup.userData.canvasWrapper;
       }
     }
   });
-  // Clear the selectedMACs array
   selectedMACs = [];
-  // Optionally update the details display
   const detailsDiv = document.getElementById("mac-details");
   detailsDiv.innerHTML = `<p><strong>Layer:</strong></p>`;
 }
 
+// --- Side Panel: MAC Canvas and Top View Functions ---
+
+function createMACCanvas(macGroup) {
+  const containerDiv = document.createElement("div");
+  containerDiv.classList.add("mac-canvas-wrapper");
+  const sidePanel = document.getElementById("side-panel");
+  containerDiv.style.marginBottom = "10px";
+  
+  const label = document.createElement("p");
+  label.textContent = `MAC - Layer: ${((macGroup.userData.z / 10) + 1).toFixed(1)}`;
+  label.style.margin = "0 0 5px 0";
+  containerDiv.appendChild(label);
+  
+  const topCanvas = document.createElement("canvas");
+  topCanvas.width = 200;
+  topCanvas.height = 200;
+  topCanvas.style.border = "2px solid #ccc";
+  containerDiv.appendChild(topCanvas);
+  
+  const barGraphCanvas = document.createElement("canvas");
+  barGraphCanvas.width = 200;
+  barGraphCanvas.height = 100;
+  barGraphCanvas.style.border = "1px solid #ccc";
+  barGraphCanvas.style.marginTop = "5px";
+  containerDiv.appendChild(barGraphCanvas);
+  
+  sidePanel.appendChild(containerDiv);
+  
+  createTopView(macGroup, topCanvas);
+  renderBarGraph(macGroup, barGraphCanvas);
+  
+  return containerDiv;
+}
+
+function createTopView(macGroup, canvas) {
+  const topScene = new THREE.Scene();
+  topScene.background = new THREE.Color(0xffffff);
+  
+  const aspect = canvas.width / canvas.height;
+  const viewSize = 5;
+  const topCamera = new THREE.OrthographicCamera(-viewSize * aspect, viewSize * aspect, viewSize, -viewSize, 0.1, 100);
+  topCamera.position.set(0, 0, 10);
+  topCamera.lookAt(0, 0, 0);
+  
+  const topRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  topRenderer.setSize(canvas.width, canvas.height);
+  
+  const compositeClone = macGroup.clone(true);
+  resetOutlineColor(compositeClone);
+  const scaleFactor = 1.5;
+  compositeClone.scale.set(scaleFactor, scaleFactor, scaleFactor);
+  compositeClone.position.set(0, 0, 0);
+  topScene.add(compositeClone);
+  
+  topRenderer.render(topScene, topCamera);
+}
+
+function resetOutlineColor(group) {
+  group.traverse(child => {
+    if (child.isLine && child.material && child.material.color && child.userData && child.userData.type === "mac_outline") {
+      child.material.color.set(0x000000);
+    }
+  });
+}
+
+function renderBarGraph(macGroup, canvas) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const sampleData = [0.8, 0.3, 0.6];
+  const barWidth = (canvas.width - 20) / sampleData.length;
+  const maxBarHeight = canvas.height - 20;
+  sampleData.forEach((value, index) => {
+    const barHeight = value * maxBarHeight;
+    const x = 10 + index * barWidth;
+    const y = canvas.height - barHeight - 10;
+    ctx.fillStyle = '#007bff';
+    ctx.fillRect(x, y, barWidth - 5, barHeight);
+    ctx.strokeStyle = '#000';
+    ctx.strokeRect(x, y, barWidth - 5, barHeight);
+    ctx.fillStyle = '#000';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Bar ${index+1}`, x + (barWidth - 5)/2, canvas.height - 2);
+  });
+}
+
+// --- Drawing Helper Functions ---
 
 function drawHexagon(shape, size) {
   for (let i = 0; i < 6; i++) {

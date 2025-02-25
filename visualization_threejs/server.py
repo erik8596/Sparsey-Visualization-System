@@ -1,5 +1,3 @@
-# server.py
-
 import os
 from flask import Flask, render_template, request, jsonify
 from services.model_service import (
@@ -58,11 +56,22 @@ def visualize():
         return jsonify({"error": "No WandB project specified"}), 400
 
     try:
-        model_config = fetch_wandb_model(run_id, project_name)
-        visualization_data = process_visualization_data(model_config)
-        response_data = {"layers": visualization_data}
-        print(f"Sending visualization data: {response_data}")  # Log the data being sent to the client
+        # 1. Fetch the model config and MAC activations from WandB.
+        model_data = fetch_wandb_model(run_id, project_name)
+        model_config = model_data["config"]
+        mac_activations = model_data["mac_activations"]
+
+        # 2. Process visualization data using the input layer logic.
+        visualization_data = process_visualization_data(model_config, mac_activations)
+
+        # 3. Build the response payload with layers and input dimensions.
+        response_data = {
+            "layers": visualization_data["layers"],
+            "input_dimensions": model_data["input_dimensions"]
+        }
+
         return jsonify(response_data)
+
     except ValueError as e:
         return jsonify({"error": str(e)}), 500
 
