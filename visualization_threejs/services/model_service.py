@@ -123,7 +123,7 @@ def process_visualization_data(model_config):
             offsets_neurons = np.stack(
                 [np.cos(angles_neurons), np.sin(angles_neurons)],
                 axis=1
-            ) * 0.3 # * (2 * 0.1)
+            ) * 0.2 # * (2 * 0.1)
 
             all_neuron_positions = all_cm_positions[:, :, None, :] + offsets_neurons[None, None, :, :]
 
