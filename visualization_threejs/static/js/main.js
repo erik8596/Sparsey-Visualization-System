@@ -167,6 +167,7 @@ function visualizeData(layers) {
         side: THREE.DoubleSide
       });
       const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
+      fillMesh.position.z = -0.01;
       macGroup.add(fillMesh);
 
       // Create an outline using LineLoop with black color
