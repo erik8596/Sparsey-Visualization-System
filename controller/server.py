@@ -1,13 +1,35 @@
 import os
+import sys
+from pathlib import Path
+
+# Add the project root directory to Python path
+project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root))
+
 from flask import Flask, render_template, request, jsonify
-from services.model_service import (
+from model.model_service import (
     get_projects,
     get_runs_from_project,
     fetch_wandb_model,
     process_visualization_data
 )
 
-app = Flask(__name__, template_folder='templates')
+# Update paths to point to view directory
+view_dir = os.path.join(project_root, 'view')
+template_dir = os.path.join(view_dir, 'templates')
+static_dir = os.path.join(view_dir, 'static')
+
+# Verify directories exist
+if not os.path.exists(template_dir):
+    raise RuntimeError(f"Template directory not found: {template_dir}")
+if not os.path.exists(static_dir):
+    raise RuntimeError(f"Static directory not found: {static_dir}")
+
+# Initialize Flask app with correct paths
+app = Flask(__name__,
+    template_folder=template_dir,
+    static_folder=static_dir
+)
 
 
 @app.route("/")
@@ -56,15 +78,17 @@ def visualize():
         return jsonify({"error": "No WandB project specified"}), 400
 
     try:
-        # 1. Fetch the model config and MAC activations from WandB.
+        # 1 Fetch the model config & mac activations
         model_data = fetch_wandb_model(run_id, project_name)
-        model_config = model_data["config"]
-        mac_activations = model_data["mac_activations"]
 
-        # 2. Process visualization data using the input layer logic.
+        # model_data should contain "config", "input_dimensions", and "mac_activations"
+        model_config = model_data["config"]
+        mac_activations = model_data["mac_activations"]  # <-- Grab the dictionary
+
+        # 2 Pass both model_config and mac_activations
         visualization_data = process_visualization_data(model_config, mac_activations)
 
-        # 3. Build the response payload with layers and input dimensions.
+        # 3 Build the response with the layers + input dimensions
         response_data = {
             "layers": visualization_data["layers"],
             "input_dimensions": model_data["input_dimensions"]
