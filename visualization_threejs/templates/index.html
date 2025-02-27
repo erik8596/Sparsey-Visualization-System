@@ -14,11 +14,10 @@
     /* Position the MAC Details header, reset button, and message in the header area */
     #mac-details-container {
       position: absolute;
-      top: 40px;      /* Adjust down as needed */
-      right: 15px;    /* Adjust left as needed */
+      top: 40px;
+      right: 15px;
       text-align: center;
     }
-    /* Flex container to place header and reset button on the same line */
     #mac-details-row {
       display: flex;
       align-items: center;
@@ -38,6 +37,30 @@
       font-style: italic;
       font-size: 0.8em;
       margin-top: 3px;
+    }
+    /* New styles for the canvas container and overlay controls */
+    #canvas-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    #threejs-container {
+      width: 100%;
+      height: 100%;
+    }
+    /* Overlay for camera controls on the left */
+    #camera-controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(255,255,255,0.8);
+      padding: 10px;
+      border-radius: 4px;
+    }
+    #camera-controls button {
+      margin: 2px;
+      font-size: 0.8em;
     }
   </style>
 </head>
@@ -67,9 +90,17 @@
   </header>
 
   <main>
-    <!-- Container for the main Three.js scene -->
-    <div id="threejs-container"></div>
-    <!-- Side panel for dynamic canvases (without the message) -->
+    <!-- Container for the main Three.js scene wrapped in a relative container -->
+    <div id="canvas-container">
+      <div id="threejs-container"></div>
+      <!-- Overlay for camera controls -->
+      <div id="camera-controls">
+        <button id="panButton">Pan Mode</button>
+        <button id="bothButton">Default Mode</button>
+        <button id="resetControls">Reset Camera</button>
+      </div>
+    </div>
+    <!-- Side panel for dynamic canvases (unchanged) -->
     <div id="side-panel">
       <!-- Additional side panel content can go here -->
     </div>

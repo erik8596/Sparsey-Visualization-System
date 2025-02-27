@@ -5,10 +5,12 @@ let clickableMACs = []; // Composite MAC groups for click detection
 let selectedMACs = [];  // Global array for currently selected MAC groups
 
 // Create a shared offscreen renderer for side-panel snapshots.
-// This renderer is never added to the DOM, so we can reuse it.
 let sharedTopRenderer = new THREE.WebGLRenderer({ antialias: true });
 sharedTopRenderer.setSize(200, 200);
 sharedTopRenderer.setClearColor(0xffffff, 1);
+
+// Rotation interval variable for continuous rotation buttons
+let rotateInterval = null;
 
 async function initialize() {
   await loadProjects();
@@ -28,6 +30,9 @@ async function initialize() {
   if (resetButton) {
     resetButton.addEventListener("click", resetToggledMACs);
   }
+  
+  // Setup the camera control buttons overlay
+  setupCameraControlButtons();
 }
 
 async function loadProjects() {
@@ -108,14 +113,12 @@ async function loadRun() {
       return;
     }
     
-    // Visualize network layers (MACs, CMs, neurons, etc.)
     visualizeData(data.layers);
     
-    // Create the input grid using provided input dimensions
     if (data.input_dimensions && data.input_dimensions.width && data.input_dimensions.height) {
       createInputGrid(data.input_dimensions.width, data.input_dimensions.height);
     } else {
-      console.error("❌ Invalid input dimensions:", data.input_dimensions);
+      console.error("Invalid input dimensions:", data.input_dimensions);
     }
   } catch (error) {
     console.error("Error during visualization:", error);
@@ -123,8 +126,114 @@ async function loadRun() {
   }
 }
 
-// --- Scene Setup and Render Functions ---
+// --- Camera Control Functions ---
 
+// Continuous rotation functions
+function startRotateLeft() {
+  if (!rotateInterval) {
+    rotateInterval = setInterval(() => {
+      controls.rotateLeft(0.02); // adjust this value for rotation speed (in radians)
+      controls.update();
+    }, 16); // roughly 60 fps
+  }
+}
+
+function startRotateRight() {
+  if (!rotateInterval) {
+    rotateInterval = setInterval(() => {
+      controls.rotateLeft(-0.02); // negative value for right rotation
+      controls.update();
+    }, 16);
+  }
+}
+
+function stopRotate() {
+  if (rotateInterval) {
+    clearInterval(rotateInterval);
+    rotateInterval = null;
+  }
+}
+
+// Pan mode: map left mouse to pan and disable rotation
+function enablePanMode() {
+  controls.enableRotate = false;
+  controls.enablePan = true;
+  controls.mouseButtons = {
+    LEFT: THREE.MOUSE.PAN,
+    MIDDLE: THREE.MOUSE.DOLLY,
+    RIGHT: THREE.MOUSE.PAN
+  };
+  console.log("Pan mode enabled");
+}
+
+// Default mode: enable both rotate and pan (default mapping: left=rotate, right=pan)
+function enableRotateAndPanMode() {
+  controls.enableRotate = true;
+  controls.enablePan = true;
+  controls.mouseButtons = {
+    LEFT: THREE.MOUSE.ROTATE,
+    MIDDLE: THREE.MOUSE.DOLLY,
+    RIGHT: THREE.MOUSE.PAN
+  };
+  console.log("Rotate & Pan mode enabled");
+}
+
+function setupCameraControlButtons() {
+  const panButton = document.getElementById("panButton");
+  const bothButton = document.getElementById("bothButton");
+  const resetControls = document.getElementById("resetControls");
+
+  // "Pan Mode": disable rotation and map the left mouse button to pan.
+  panButton.addEventListener("click", () => {
+    controls.enableRotate = false;
+    controls.enablePan = true;
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.PAN,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
+    console.log("Pan mode enabled");
+  });
+
+  // "Default Mode": restore full OrbitControls (rotate with left, pan with right).
+  bothButton.addEventListener("click", () => {
+    controls.enableRotate = true;
+    controls.enablePan = true;
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
+    // Also reset any angle limitations:
+    controls.minAzimuthAngle = -Infinity;
+    controls.maxAzimuthAngle = Infinity;
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = Math.PI;
+    console.log("Default mode enabled (rotate & pan)");
+  });
+
+  // "Reset Controls": resets OrbitControls to its defaults.
+  resetControls.addEventListener("click", () => {
+    controls.enableRotate = true;
+    controls.enablePan = true;
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
+    controls.minAzimuthAngle = -Infinity;
+    controls.maxAzimuthAngle = Infinity;
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = Math.PI;
+    controls.reset();
+    console.log("Controls reset");
+  });
+}
+
+
+
+
+// --- Scene Setup and Render Functions ---
 function visualizeData(layers) {
   if (scene) {
     while (scene.children.length > 0) {
@@ -146,6 +255,12 @@ function visualizeData(layers) {
     controls.dampingFactor = 0.05;
     controls.maxDistance = 200;
     controls.screenSpacePanning = false;
+    // Default mapping: left=rotate, right=pan.
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
     window.addEventListener('resize', onWindowResize, false);
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
@@ -155,33 +270,23 @@ function visualizeData(layers) {
   const mac_spacing = 1.33;
   let macGroups = [];
   
-  // Create composite MAC groups from elements of type "mac"
   layers.forEach(element => {
     if (element.type === "mac") {
-      console.log("MAC active:", element.active); // Debug log
       const macGroup = new THREE.Group();
       const shape = new THREE.Shape();
-      drawHexagon(shape, 2.0); // Adjust MAC size as needed
-
-      // Create a fill mesh:
+      drawHexagon(shape, 2.0);
       const fillGeometry = new THREE.ShapeGeometry(shape);
-      // Use light red fill if active, otherwise transparent.
-      // Explicitly check if active equals true or equals 1.
       const isActive = (element.active === true || element.active === 1);
-      const fillColor = 0xffcccc; 
-      const fillOpacity = isActive ? 1.0 : 0.0;
       const fillMaterial = new THREE.MeshBasicMaterial({
-        color: fillColor,
+        color: 0xffcccc,
         transparent: true,
-        opacity: fillOpacity,
+        opacity: isActive ? 1.0 : 0.0,
         side: THREE.DoubleSide
       });
       const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
-      // Slightly offset fill mesh in the z-axis to avoid z-fighting
       fillMesh.position.z = -0.01;
       macGroup.add(fillMesh);
 
-      // Create an outline using LineLoop with black color
       const points = shape.getPoints();
       const outlineGeometry = new THREE.BufferGeometry().setFromPoints(points);
       const outlineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
@@ -200,20 +305,20 @@ function visualizeData(layers) {
     }
   });
   
-  // Attach "cm" and "neuron" elements to the nearest MAC group
   layers.forEach(element => {
     if (element.type === "cm" || element.type === "neuron") {
       let object;
+      const scale = element.scale || 1;
       if (element.type === "cm") {
         const shape = new THREE.Shape();
-        drawHexagon(shape, 0.5);
+        drawHexagon(shape, 0.5 * scale);
         const points = shape.getPoints();
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
         const material = new THREE.LineBasicMaterial({ color: 0x0000FF, linewidth: 2 });
         object = new THREE.LineLoop(geometry, material);
       } else if (element.type === "neuron") {
         const shape = new THREE.Shape();
-        drawCircle(shape, 0.10);
+        drawCircle(shape, 0.10 * scale);
         const points = shape.getPoints();
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
         const material = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
@@ -246,11 +351,10 @@ function visualizeData(layers) {
   animate();
 }
 
-// Create the input grid (the input layer) based on columns and rows.
 function createInputGrid(cols, rows) {
   const hexSize = 2.0;
   const macSpacing = 3.0;
-  const zOffset = -10; // Place the input grid behind the network layers
+  const zOffset = -10;
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x = col * macSpacing;
@@ -258,7 +362,6 @@ function createInputGrid(cols, rows) {
       if (col % 2 !== 0) {
         y += (Math.sqrt(3) * hexSize) / 2;
       }
-      // Create a hexagon for the input grid cell using createHexagon
       const cellHex = createHexagon(hexSize, 0x0000ff);
       cellHex.position.set(
         x - ((cols - 1) * macSpacing) / 2,
@@ -270,7 +373,6 @@ function createInputGrid(cols, rows) {
   }
 }
 
-// Create a hexagon mesh given a size and color.
 function createHexagon(size, color) {
   const shape = new THREE.Shape();
   drawHexagon(shape, size);
@@ -294,54 +396,37 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-// --- Mouse Interaction and Side Panel Functions ---
-
 function onDocumentMouseClick(event) {
   const rect = renderer.domElement.getBoundingClientRect();
   mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
-
-  console.log("Mouse coords:", mouse);
-  console.log("Raycaster:", raycaster.ray);
-
   const intersects = raycaster.intersectObjects(clickableMACs, true);
-  console.log("Intersections:", intersects);
-
   if (intersects.length > 0) {
     const macGroup = getMACGroup(intersects[0].object);
-    console.log("getMACGroup result:", macGroup);
     if (macGroup && macGroup.userData && macGroup.userData.type === "mac") {
       try {
         toggleMACSelection(macGroup);
       } catch (error) {
         console.error("Error toggling MAC selection:", error);
       }
-    } else {
-      console.log("Clicked object is not a valid MAC group.");
     }
-  } else {
-    console.log("No intersections found.");
   }
 }
 
 function getMACGroup(object) {
-  console.log("getMACGroup initial object:", object);
   while (object) {
     if (clickableMACs.includes(object) && object.userData && object.userData.type === "mac") {
-      console.log("Found MAC group:", object);
       return object;
     }
     object = object.parent;
   }
-  console.log("No valid MAC group found.");
   return null;
 }
 
 function toggleMACSelection(macGroup) {
   const outlineLine = macGroup.userData.outlineLine;
   if (macGroup.userData.isSelected) {
-    // Deselect: revert outline to black, lower MAC, and hide side-panel snapshot.
     outlineLine.material.color.set(0x000000);
     macGroup.position.z = macGroup.userData.originalZ;
     macGroup.userData.isSelected = false;
@@ -353,7 +438,6 @@ function toggleMACSelection(macGroup) {
       macGroup.userData.canvasWrapper.style.display = "none";
     }
   } else {
-    // On selection: create side-panel snapshot only if not already present.
     if (!macGroup.userData.canvasWrapper) {
       macGroup.userData.canvasWrapper = createMACCanvas(macGroup);
     } else {
@@ -373,7 +457,6 @@ function toggleMACSelection(macGroup) {
 }
 
 function resetToggledMACs() {
-  // Reset selection for all selected MACs.
   selectedMACs.forEach(macGroup => {
     if (macGroup.userData.isSelected) {
       macGroup.userData.outlineLine.material.color.set(0x000000);
@@ -382,32 +465,24 @@ function resetToggledMACs() {
     }
   });
   selectedMACs = [];
-
-  // Clear the details display if present.
   const detailsDiv = document.getElementById("mac-details");
   if (detailsDiv) {
     detailsDiv.innerHTML = `<p><strong>Layer:</strong></p>`;
   }
-
-  // Clear the entire side panel.
   clearSidePanel();
-  
-  // Also clear the cached canvas wrapper references on all MAC groups.
   clickableMACs.forEach(macGroup => {
     macGroup.userData.canvasWrapper = null;
   });
 }
 
-// --- Side Panel: MAC Canvas and Top View Functions ---
-
 function createMACCanvas(macGroup) {
   const containerDiv = document.createElement("div");
   containerDiv.classList.add("mac-canvas-wrapper");
-  const sidePanel = document.getElementById("side-panel");
   containerDiv.style.marginBottom = "10px";
+  containerDiv.style.textAlign = "center";
   
   const label = document.createElement("p");
-  label.textContent = `MAC - Layer: ${((macGroup.userData.z / 10) + 1).toFixed(1)}`;
+  label.textContent = `MAC Layer ${(macGroup.userData.z / 10) + 1}`;
   label.style.margin = "0 0 5px 0";
   containerDiv.appendChild(label);
   
@@ -415,15 +490,32 @@ function createMACCanvas(macGroup) {
   topCanvas.width = 200;
   topCanvas.height = 200;
   topCanvas.style.border = "2px solid #ccc";
+  topCanvas.style.display = "block";
+  topCanvas.style.margin = "0 auto";
   containerDiv.appendChild(topCanvas);
   
+  const barGraphLabel = document.createElement("p");
+  barGraphLabel.textContent = "MAC Activation Probabilities:";
+  barGraphLabel.style.margin = "5px 0";
+  barGraphLabel.style.fontStyle = "italic";
+  containerDiv.appendChild(barGraphLabel);
+  
+  const barGraphScrollContainer = document.createElement("div");
+  barGraphScrollContainer.style.width = "200px";
+  barGraphScrollContainer.style.overflowX = "auto";
+  barGraphScrollContainer.style.display = "block";
+  barGraphScrollContainer.style.margin = "0 auto";
+  
   const barGraphCanvas = document.createElement("canvas");
-  barGraphCanvas.width = 200;
+  barGraphCanvas.width = 800;
   barGraphCanvas.height = 100;
   barGraphCanvas.style.border = "1px solid #ccc";
   barGraphCanvas.style.marginTop = "5px";
-  containerDiv.appendChild(barGraphCanvas);
   
+  barGraphScrollContainer.appendChild(barGraphCanvas);
+  containerDiv.appendChild(barGraphScrollContainer);
+  
+  const sidePanel = document.getElementById("side-panel");
   sidePanel.appendChild(containerDiv);
   
   createTopView(macGroup, topCanvas);
@@ -432,8 +524,6 @@ function createMACCanvas(macGroup) {
   return containerDiv;
 }
 
-// Use the sharedTopRenderer to render a top view snapshot offscreen,
-// then copy the resulting image to the provided canvas using its 2D context.
 function createTopView(macGroup, canvas) {
   const topScene = new THREE.Scene();
   topScene.background = new THREE.Color(0xffffff);
@@ -453,17 +543,14 @@ function createTopView(macGroup, canvas) {
   compositeClone.position.set(0, 0, 0);
   topScene.add(compositeClone);
   
-  // Create a render target for the snapshot.
   const renderTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height);
   sharedTopRenderer.setRenderTarget(renderTarget);
   sharedTopRenderer.render(topScene, topCamera);
   sharedTopRenderer.setRenderTarget(null);
   
-  // Read pixel data from the render target.
   const pixelBuffer = new Uint8Array(canvas.width * canvas.height * 4);
   sharedTopRenderer.readRenderTargetPixels(renderTarget, 0, 0, canvas.width, canvas.height, pixelBuffer);
   
-  // Create a temporary 2D canvas to transfer the image.
   const tempCanvas = document.createElement('canvas');
   tempCanvas.width = canvas.width;
   tempCanvas.height = canvas.height;
@@ -473,7 +560,6 @@ function createTopView(macGroup, canvas) {
   flipImageDataVertically(imageData);
   tempCtx.putImageData(imageData, 0, 0);
   
-  // Draw the snapshot onto the target canvas.
   const ctx2d = canvas.getContext('2d');
   ctx2d.clearRect(0, 0, canvas.width, canvas.height);
   ctx2d.drawImage(tempCanvas, 0, 0);
@@ -481,7 +567,6 @@ function createTopView(macGroup, canvas) {
   renderTarget.dispose();
 }
 
-// Utility function to vertically flip ImageData
 function flipImageDataVertically(imageData) {
   const width = imageData.width;
   const height = imageData.height;
@@ -508,25 +593,29 @@ function resetOutlineColor(group) {
 function renderBarGraph(macGroup, canvas) {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const sampleData = [0.8, 0.3, 0.6];
-  const barWidth = (canvas.width - 20) / sampleData.length;
+
+  const sampleData = Array.from({ length: 40 }, () => Math.random());
+  const fixedBarWidth = 10;
+  const gap = 8;
+  const offsetX = 0;
   const maxBarHeight = canvas.height - 20;
+
   sampleData.forEach((value, index) => {
     const barHeight = value * maxBarHeight;
-    const x = 10 + index * barWidth;
+    const x = offsetX + index * (fixedBarWidth + gap);
     const y = canvas.height - barHeight - 10;
+    
     ctx.fillStyle = '#007bff';
-    ctx.fillRect(x, y, barWidth - 5, barHeight);
+    ctx.fillRect(x, y, fixedBarWidth, barHeight);
     ctx.strokeStyle = '#000';
-    ctx.strokeRect(x, y, barWidth - 5, barHeight);
+    ctx.strokeRect(x, y, fixedBarWidth, barHeight);
+    
     ctx.fillStyle = '#000';
     ctx.font = '10px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(`Bar ${index+1}`, x + (barWidth - 5)/2, canvas.height - 2);
+    ctx.fillText(index + 1, x + fixedBarWidth / 2, canvas.height - 2);
   });
 }
-
-// --- Drawing Helper Functions ---
 
 function drawHexagon(shape, size) {
   for (let i = 0; i < 6; i++) {

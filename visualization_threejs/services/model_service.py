@@ -1,6 +1,6 @@
 import wandb
 import numpy as np
-from .grid_utils import hex_grid, cm_centers, neuron_centers
+from .grid_utils import hex_grid, place_cms_in_mac, place_neurons_in_cm
 import re
 
 def get_projects():
@@ -83,7 +83,11 @@ def fetch_wandb_model(run_id, project_name):
 
 
 def process_visualization_data(model_config, mac_activations):
-    """Process model configuration and MAC activations to prepare visualization data."""
+    """
+    Example usage of place_cms_in_mac and place_neurons_in_cm
+    to ensure all CMs fit inside a MAC boundary without overlap,
+    and all neurons fit inside a CM boundary without overlap.
+    """
     visualization_data = []
 
     for idx, (layer_name, layer_dict) in enumerate(model_config.items()):
@@ -94,58 +98,67 @@ def process_visualization_data(model_config, mac_activations):
         num_neurons = params.get("num_neurons_per_cm", 1)
 
         z = idx * 10
-
         # Retrieve MAC activations for this layer
         layer_activation_dict = mac_activations.get(layer_name, {})
 
+        # 1) Place MACs in a hex grid
         mac_positions = hex_grid(rows, cols, hex_size=1.5)
 
-        # ----- MAC Loop -----
-        for i, (x, y) in enumerate(mac_positions, start=1):
+        # For each MAC in this layer
+        for i, (mac_x, mac_y) in enumerate(mac_positions, start=1):
             is_active = layer_activation_dict.get(i, 0) == 1
             visualization_data.append({
                 "type": "mac",
-                "x": x,
-                "y": y,
+                "x": mac_x,
+                "y": mac_y,
                 "z": z,
                 "active": is_active
             })
 
-        # ----- CM Logic -----
-        if num_cms > 1:
-            angles_cms = np.linspace(0, 2 * np.pi, num_cms, endpoint=False)
-            offsets_cms = np.stack([np.cos(angles_cms), np.sin(angles_cms)], axis=1) * 1
-            all_cm_positions = mac_positions[:, None, :] + offsets_cms[None, :, :]
-        else:
-            all_cm_positions = mac_positions[:, None, :]
+            # 2) Place CMs inside the MAC
+            #    If your MAC side is 2.0 in main.js, the bounding circle radius is ~2.0
+            #    Adjust gap as needed so they don't overlap.
+            mac_radius = 2.0
+            cm_radius = 0.5
+            cm_gap = 0.2
 
-        flat_cm_positions = all_cm_positions.reshape(-1, 2)
-        for (cx, cy) in flat_cm_positions:
-            visualization_data.append({
-                "type": "cm",
-                "x": cx,
-                "y": cy,
-                "z": z
-            })
+            cm_positions = place_cms_in_mac(
+                mac_center_x=mac_x,
+                mac_center_y=mac_y,
+                mac_radius=mac_radius,
+                num_cms=num_cms,
+                cm_radius=cm_radius,
+                gap=cm_gap
+            )
 
-        # ----- Neuron Logic -----
-        if num_neurons > 1:
-            angles_neurons = np.linspace(0, 2 * np.pi, num_neurons, endpoint=False)
-            offsets_neurons = np.stack([np.cos(angles_neurons), np.sin(angles_neurons)], axis=1) * 0.3
-            all_neuron_positions = all_cm_positions[:, :, None, :] + offsets_neurons[None, None, :, :]
-        else:
-            all_neuron_positions = all_cm_positions[:, :, None, :]
+            for (cm_x, cm_y) in cm_positions:
+                visualization_data.append({
+                    "type": "cm",
+                    "x": cm_x,
+                    "y": cm_y,
+                    "z": z
+                })
 
-        flat_neuron_positions = all_neuron_positions.reshape(-1, 2)
-        for (nx, ny) in flat_neuron_positions:
-            visualization_data.append({
-                "type": "neuron",
-                "x": nx,
-                "y": ny,
-                "z": z
-            })
+                # 3) Place neurons inside the CM
+                #    If your CM side is 0.5 in main.js, the bounding circle radius is ~0.5
+                #    Adjust gap so they don't overlap
+                neuron_positions = place_neurons_in_cm(
+                    cm_center_x=cm_x,
+                    cm_center_y=cm_y,
+                    cm_radius=cm_radius,      # same 0.5
+                    num_neurons=num_neurons,
+                    neuron_radius=0.10,       # if you drawCircle(shape, 0.10)
+                    gap=0.1
+                )
+                for (nx, ny) in neuron_positions:
+                    visualization_data.append({
+                        "type": "neuron",
+                        "x": nx,
+                        "y": ny,
+                        "z": z
+                    })
 
-    # ----- Input Dimensions from layer_1 for convenience -----
+    # Retrieve input dimensions from layer_1 for convenience
     layer_1_params = model_config.get("layer_1", {}).get("params", {})
     input_dimensions = {
         "width": layer_1_params.get("prev_layer_mac_grid_num_cols", None),
@@ -156,7 +169,6 @@ def process_visualization_data(model_config, mac_activations):
         "layers": visualization_data,
         "input_dimensions": input_dimensions
     }
-
 
 def parse_mac_activations(summary_data):
     """
