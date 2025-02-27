@@ -1,7 +1,8 @@
+import re
 import wandb
 import numpy as np
-from .grid_utils import hex_grid, cm_centers, neuron_centers
-import re
+from .factories import MACFactory, CMFactory, NeuronFactory
+from .components import MAC, CM, Neuron
 
 def get_projects():
     """Fetch available projects from WandB."""
@@ -83,78 +84,68 @@ def fetch_wandb_model(run_id, project_name):
 
 
 def process_visualization_data(model_config, mac_activations):
-    """Process model configuration and MAC activations to prepare visualization data."""
+    """Process model configuration using Factory and Composite patterns."""
+    mac_factory = MACFactory()
+    cm_factory = CMFactory()
+    neuron_factory = NeuronFactory()
+
     visualization_data = []
 
     for idx, (layer_name, layer_dict) in enumerate(model_config.items()):
         params = layer_dict.get("params", {})
-        rows = params.get("mac_grid_num_rows", 1)
-        cols = params.get("mac_grid_num_cols", 1)
-        num_cms = params.get("num_cms_per_mac", 1)
-        num_neurons = params.get("num_neurons_per_cm", 1)
-
         z = idx * 10
 
-        # Retrieve MAC activations for this layer
+        # Get MAC positions
+        mac_positions = mac_factory.calculate_positions(
+            rows=params.get("mac_grid_num_rows", 1),
+            cols=params.get("mac_grid_num_cols", 1)
+        )
+
         layer_activation_dict = mac_activations.get(layer_name, {})
 
-        mac_positions = hex_grid(rows, cols, hex_size=1.5)
-
-        # ----- MAC Loop -----
+        # Create MACs
+        macs = []
         for i, (x, y) in enumerate(mac_positions, start=1):
             is_active = layer_activation_dict.get(i, 0) == 1
-            visualization_data.append({
-                "type": "mac",
-                "x": x,
-                "y": y,
-                "z": z,
-                "active": is_active
-            })
+            mac = mac_factory.create_component(x, y, z, active=is_active)
+            macs.append(mac)
 
-        # ----- CM Logic -----
-        if num_cms > 1:
-            angles_cms = np.linspace(0, 2 * np.pi, num_cms, endpoint=False)
-            offsets_cms = np.stack([np.cos(angles_cms), np.sin(angles_cms)], axis=1) * 1
-            all_cm_positions = mac_positions[:, None, :] + offsets_cms[None, :, :]
-        else:
-            all_cm_positions = mac_positions[:, None, :]
+            # Get CM positions for this MAC
+            cm_positions = cm_factory.calculate_positions(
+                np.array([[x, y]]),  # Single MAC position
+                params.get("num_cms_per_mac", 1)
+            )
 
-        flat_cm_positions = all_cm_positions.reshape(-1, 2)
-        for (cx, cy) in flat_cm_positions:
-            visualization_data.append({
-                "type": "cm",
-                "x": cx,
-                "y": cy,
-                "z": z
-            })
+            # Create CMs
+            for cm_pos in cm_positions.reshape(-1, 2):
+                cm = cm_factory.create_component(cm_pos[0], cm_pos[1], z)
+                mac.add_cm(cm)
 
-        # ----- Neuron Logic -----
-        if num_neurons > 1:
-            angles_neurons = np.linspace(0, 2 * np.pi, num_neurons, endpoint=False)
-            offsets_neurons = np.stack([np.cos(angles_neurons), np.sin(angles_neurons)], axis=1) * 0.3
-            all_neuron_positions = all_cm_positions[:, :, None, :] + offsets_neurons[None, None, :, :]
-        else:
-            all_neuron_positions = all_cm_positions[:, :, None, :]
+                # Get neuron positions for this CM
+                neuron_positions = neuron_factory.calculate_positions(
+                    np.array([cm_pos]),  # Single CM position
+                    params.get("num_neurons_per_cm", 1)
+                )
 
-        flat_neuron_positions = all_neuron_positions.reshape(-1, 2)
-        for (nx, ny) in flat_neuron_positions:
-            visualization_data.append({
-                "type": "neuron",
-                "x": nx,
-                "y": ny,
-                "z": z
-            })
+                # Create neurons
+                for neuron_pos in neuron_positions.reshape(-1, 2):
+                    neuron = neuron_factory.create_component(
+                        neuron_pos[0],
+                        neuron_pos[1],
+                        z
+                    )
+                    cm.add_neuron(neuron)
 
-    # ----- Input Dimensions from layer_1 for convenience -----
-    layer_1_params = model_config.get("layer_1", {}).get("params", {})
-    input_dimensions = {
-        "width": layer_1_params.get("prev_layer_mac_grid_num_cols", None),
-        "height": layer_1_params.get("prev_layer_mac_grid_num_rows", None)
-    }
+        # Collect visualization data
+        for mac in macs:
+            visualization_data.extend(mac.get_visualization_data())
 
     return {
         "layers": visualization_data,
-        "input_dimensions": input_dimensions
+        "input_dimensions": {
+            "width": model_config.get("layer_1", {}).get("params", {}).get("prev_layer_mac_grid_num_cols"),
+            "height": model_config.get("layer_1", {}).get("params", {}).get("prev_layer_mac_grid_num_rows")
+        }
     }
 
 
