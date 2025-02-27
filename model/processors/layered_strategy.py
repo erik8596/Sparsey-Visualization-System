@@ -1,0 +1,91 @@
+from __future__ import annotations
+from typing import Dict, Any, List
+import numpy as np
+from ..factories import MACFactory, CMFactory, NeuronFactory
+from ..components import MAC, CM
+from .base_strategy import VisualizationStrategy
+
+class LayeredVisualizationStrategy(VisualizationStrategy):
+    """Concrete strategy for layered visualization"""
+
+    def __init__(self):
+        self.mac_factory = MACFactory()
+        self.cm_factory = CMFactory()
+        self.neuron_factory = NeuronFactory()
+
+    def process(self, model_config: Dict[str, Any], mac_activations: Dict[str, Dict[int, int]]) -> Dict[str, Any]:
+        visualization_data = []
+
+        for idx, (layer_name, layer_dict) in enumerate(model_config.items()):
+            visualization_data.extend(
+                self._process_layer(idx, layer_name, layer_dict, mac_activations)
+            )
+
+        return {
+            "layers": visualization_data,
+            "input_dimensions": self._get_input_dimensions(model_config)
+        }
+
+    def _process_layer(self, idx: int, layer_name: str, layer_dict: Dict[str, Any],
+        mac_activations: Dict[str, Dict[int, int]]) -> List[Dict[str, Any]]:
+        params = layer_dict.get("params", {})
+        z = idx * 10
+        layer_data = []
+
+        mac_positions = self._get_mac_positions(params)
+        layer_activation_dict = mac_activations.get(layer_name, {})
+
+        for i, (x, y) in enumerate(mac_positions, start=1):
+            mac = self._create_mac_with_components(x, y, z, i, params, layer_activation_dict)
+            layer_data.extend(mac.get_visualization_data())
+
+        return layer_data
+
+    def _get_mac_positions(self, params: Dict[str, Any]) -> np.ndarray:
+        return self.mac_factory.calculate_positions(
+            rows=params.get("mac_grid_num_rows", 1),
+            cols=params.get("mac_grid_num_cols", 1)
+        )
+
+    def _create_mac_with_components(self, x: float, y: float, z: float,
+                                    mac_idx: int, params: Dict[str, Any],
+                                    activations: Dict[int, int]) -> 'MAC':
+        is_active = activations.get(mac_idx, 0) == 1
+        mac = self.mac_factory.create_component(x, y, z, active=is_active)
+
+        cm_positions = self._get_cm_positions(x, y, params)
+        for cm_pos in cm_positions.reshape(-1, 2):
+            cm = self._create_cm_with_neurons(cm_pos[0], cm_pos[1], z, params)
+            mac.add_cm(cm)
+
+        return mac
+
+    def _get_cm_positions(self, x: float, y: float, params: Dict[str, Any]) -> np.ndarray:
+        return self.cm_factory.calculate_positions(
+            np.array([[x, y]]),
+            params.get("num_cms_per_mac", 1)
+        )
+
+    def _create_cm_with_neurons(self, x: float, y: float, z: float,
+                                params: Dict[str, Any]) -> 'CM':
+        cm = self.cm_factory.create_component(x, y, z)
+
+        neuron_positions = self.neuron_factory.calculate_positions(
+            np.array([[x, y]]),
+            params.get("num_neurons_per_cm", 1)
+        )
+
+        for neuron_pos in neuron_positions.reshape(-1, 2):
+            neuron = self.neuron_factory.create_component(
+                neuron_pos[0], neuron_pos[1], z
+            )
+            cm.add_neuron(neuron)
+
+        return cm
+
+    def _get_input_dimensions(self, model_config: Dict[str, Any]) -> Dict[str, int]:
+        layer_1_params = model_config.get("layer_1", {}).get("params", {})
+        return {
+            "width": layer_1_params.get("prev_layer_mac_grid_num_cols"),
+            "height": layer_1_params.get("prev_layer_mac_grid_num_rows")
+        }

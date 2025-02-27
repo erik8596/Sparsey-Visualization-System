@@ -1,5 +1,6 @@
 /* Reset some default spacing */
-body, html {
+body,
+html {
   margin: 0;
   padding: 0;
   height: 100%;
@@ -28,7 +29,8 @@ header h1 {
 /* Main container holds both the Three.js scene and the side panel */
 main {
   display: flex;
-  height: calc(100% - 80px); /* Adjust based on header height */
+  height: calc(100% - 80px);
+  /* Adjust based on header height */
 }
 
 /* Three.js container styles */
@@ -40,7 +42,8 @@ main {
 
 /* Side panel styles */
 #side-panel {
-  width: 300px; /* Initial width */
+  width: 300px;
+  /* Initial width */
   padding: 20px;
   box-sizing: border-box;
   background-color: #ffffff;
@@ -72,4 +75,40 @@ main {
   border-bottom: 3px solid #ccc;
   padding-bottom: 10px;
   margin-bottom: 10px;
+}
+
+/* MAC Details Container Styles */
+#mac-details-container {
+  position: absolute;
+  top: 40px;
+  right: 15px;
+  text-align: center;
+}
+
+/* Flex container for header and reset button */
+#mac-details-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* MAC Details Header Styles */
+#mac-details-header {
+  font-size: 1.3em;
+  font-weight: bold;
+  margin: 0;
+}
+
+/* Reset Button Styles */
+#resetButton {
+  padding: 3px 7px;
+  font-size: 0.8em;
+}
+
+/* MAC Details Message Styles */
+#mac-details-msg {
+  font-style: italic;
+  font-size: 0.8em;
+  margin-top: 3px;
 }
