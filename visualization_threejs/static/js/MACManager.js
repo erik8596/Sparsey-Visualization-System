@@ -1,4 +1,3 @@
-// /static/js/MacManager.js
 import { eventBus } from './app.js';
 import { getElementFactory } from './factories/ElementFactoryProvider.js';
 
@@ -13,16 +12,14 @@ export class MacManager {
     this.clickableMACs = [];
     this.selectedMACs = [];
 
-    // Subscribe to "sceneClicked" -> handle picking
+    // Subscribe to "sceneClicked"
     eventBus.subscribe('sceneClicked', (event) => this.onSceneClick(event));
-
-    // Subscribe to "resetMACs" -> reset toggles
+    // Subscribe to "resetMACs"
     eventBus.subscribe('resetMACs', () => this.resetToggledMACs());
   }
 
-  // Called when the user has new "layers" data from the server
   buildFromLayers(layers) {
-    // Clear existing objects from the scene
+    // Clear old scene objects
     while (this.scene.children.length > 0) {
       this.scene.remove(this.scene.children[0]);
     }
@@ -31,12 +28,13 @@ export class MacManager {
 
     const macGroups = [];
 
-    // First pass: build all "mac" objects
+    // First pass: create MAC composites
     layers.forEach(element => {
       if (element.type === 'mac') {
         const factory = getElementFactory('mac');
+        if (!factory) return;
         const macGroup = factory.createElement(element);
-        // Position is handled outside the factory
+
         const mac_spacing = 1.33;
         macGroup.position.set(element.x, element.y * mac_spacing, element.z);
 
@@ -46,28 +44,24 @@ export class MacManager {
       }
     });
 
-    // Second pass: build all "cm" or "neuron" objects
+    // Second pass: create CM/neuron objects
     layers.forEach(element => {
       if (element.type === 'cm' || element.type === 'neuron') {
         const factory = getElementFactory(element.type);
-        if (!factory) {
-          console.warn("No factory found for type:", element.type);
-          return;
-        }
+        if (!factory) return;
         const obj = factory.createElement(element);
 
-        // Position it
         const mac_spacing = 1.33;
         obj.position.set(element.x, element.y * mac_spacing, element.z);
 
-        // Attach to the nearest MAC group in the same plane
+        // Attach to nearest MAC
         let closestMac = null;
         let minDistance = Infinity;
         macGroups.forEach(macGroup => {
           if (Math.abs(macGroup.position.z - obj.position.z) < 0.001) {
             const dx = macGroup.position.x - obj.position.x;
             const dy = macGroup.position.y - obj.position.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
+            const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < minDistance) {
               minDistance = dist;
               closestMac = macGroup;
@@ -76,9 +70,8 @@ export class MacManager {
         });
 
         if (closestMac) {
-          // Convert to local coords
           obj.position.sub(closestMac.position);
-          closestMac.add(obj);
+          closestMac.add(obj); // composite add
         } else {
           this.sceneManager.add(obj);
         }
@@ -137,7 +130,6 @@ export class MacManager {
       this.selectedMACs.push(macGroup);
     }
 
-    // Update details div
     const macData = macGroup.userData;
     const layer = (macData.z / 10) + 1;
     const detailsDiv = document.getElementById('mac-details');
@@ -165,7 +157,6 @@ export class MacManager {
     });
   }
 
-  // createInputGrid logic is unchanged from your old code
   createInputGrid(cols, rows) {
     const hexSize = 2.0;
     const macSpacing = 3.0;
@@ -179,8 +170,7 @@ export class MacManager {
           y += (Math.sqrt(3) * hexSize) / 2;
         }
 
-        // We'll just create a small hex for each input cell
-        // This is an extra feature from your old code
+        // We'll create a small hex shape for the input cell
         const shape = new THREE.Shape();
         for (let i = 0; i < 6; i++) {
           let angle = (Math.PI / 3) * i;
@@ -205,7 +195,6 @@ export class MacManager {
     }
   }
 
-  // The side panel & bar graph logic is preserved
   createMACCanvas(macGroup) {
     const containerDiv = document.createElement('div');
     containerDiv.classList.add('mac-canvas-wrapper');

@@ -1,10 +1,6 @@
 // /static/js/SceneManager.js
 // Manages the Three.js scene, camera, renderer, and animation loop.
-
-import { eventBus } from './app.js'; // We'll import the shared eventBus
-// We assume <script src="three.min.js" /> is in index.html, so THREE is global
-// If you prefer an ES import, you'd do: import * as THREE from 'three';
-// and similarly for OrbitControls.
+import { eventBus } from './app.js';
 
 export class SceneManager {
   constructor(containerId) {
@@ -16,14 +12,12 @@ export class SceneManager {
     this.raycaster = null;
     this.mouse = new THREE.Vector2();
 
-    // We'll create a shared top renderer for side-panel snapshots,
-    // just like your old code did.
+    // Shared top renderer for side-panel snapshots
     this.sharedTopRenderer = new THREE.WebGLRenderer({ antialias: true });
     this.sharedTopRenderer.setSize(200, 200);
     this.sharedTopRenderer.setClearColor(0xffffff, 1);
 
-    this.rotateInterval = null; // used for continuous rotation
-
+    this.rotateInterval = null;
     this.initScene();
     this.initEvents();
     this.animate();
@@ -45,7 +39,6 @@ export class SceneManager {
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
     this.container.appendChild(this.renderer.domElement);
 
-    // Use OrbitControls from the global scope
     this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
@@ -63,8 +56,7 @@ export class SceneManager {
   initEvents() {
     window.addEventListener('resize', () => this.onWindowResize(), false);
 
-    // Instead of hooking "click" directly to toggling MACs,
-    // we publish an event so that MacManager can handle it.
+    // Instead of direct toggling, we publish an event "sceneClicked"
     this.renderer.domElement.addEventListener('click', (event) => {
       eventBus.notify('sceneClicked', event);
     });
@@ -82,17 +74,14 @@ export class SceneManager {
     this.renderer.render(this.scene, this.camera);
   }
 
-  // Utility to add objects to the scene
   add(object) {
     this.scene.add(object);
   }
 
-  // Utility to remove objects
   remove(object) {
     this.scene.remove(object);
   }
 
-  // Continuous rotation logic, same as main.js
   startRotateLeft() {
     if (!this.rotateInterval) {
       this.rotateInterval = setInterval(() => {
