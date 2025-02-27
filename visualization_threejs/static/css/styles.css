@@ -31,11 +31,13 @@ main {
   height: calc(100% - 80px); /* Adjust based on header height */
 }
 
-/* Three.js container styles */
+/* Three.js container styles (merged) */
 #threejs-container {
   flex: 1;
   background-color: #eaeaea;
   position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 /* Side panel styles */
@@ -72,4 +74,63 @@ main {
   border-bottom: 3px solid #ccc;
   padding-bottom: 10px;
   margin-bottom: 10px;
+}
+
+/* -------------------------------
+   BELOW: Styles moved from index.html
+   ------------------------------- */
+
+/* Position the MAC Details header, reset button, and message in the header area */
+#mac-details-container {
+  position: absolute;
+  top: 40px;
+  right: 15px;
+  text-align: center;
+}
+
+#mac-details-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+#mac-details-header {
+  font-size: 1.3em;
+  font-weight: bold;
+  margin: 0;
+}
+
+#resetButton {
+  padding: 3px 7px;
+  font-size: 0.8em;
+}
+
+#mac-details-msg {
+  font-style: italic;
+  font-size: 0.8em;
+  margin-top: 3px;
+}
+
+/* New styles for the canvas container and overlay controls */
+#canvas-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Overlay for camera controls on the left */
+#camera-controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+  background: rgba(255,255,255,0.8);
+  padding: 10px;
+  border-radius: 4px;
+}
+
+#camera-controls button {
+  margin: 2px;
+  font-size: 0.8em;
 }
