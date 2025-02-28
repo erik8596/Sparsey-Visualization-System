@@ -25,7 +25,7 @@ export class SceneManager {
 
   initScene() {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xffffff);
+    this.scene.background = new THREE.Color(0x222222); // should reset it back to white when needed
 
     this.camera = new THREE.PerspectiveCamera(
       75,
