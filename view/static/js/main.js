@@ -20,7 +20,45 @@ async function initialize() {
       let runSelect = document.getElementById('runSelect');
       runSelect.disabled = true;
       runSelect.innerHTML = '<option value="" disabled selected>Loading runs...</option>';
+      // Update project selection on server
+      fetch(`/api/update-project/${selectedProject}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      }).catch(error => {
+        console.error('Error updating project selection:', error);
+      });
+      console.log(`Updated project selection to ${selectedProject}`);
       loadRuns(selectedProject);
+    }
+  });
+
+  // Add event listener for run selection changes
+  document.getElementById('runSelect').addEventListener('change', async (event) => {
+    const runId = event.target.value;
+    const projectName = document.getElementById('projectSelect').value;
+
+    if (runId && projectName) {
+      try {
+        const response = await fetch(`/api/update-run/${projectName}/${runId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            run_id: runId,
+            project: projectName
+          })
+        });
+
+        const data = await response.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        console.log(`Updated run selection: ${runId}`);
+      } catch (error) {
+        console.error('Error updating run selection:', error);
+        alert(`Failed to update run: ${error.message}`);
+      }
     }
   });
 
@@ -30,52 +68,72 @@ async function initialize() {
   }
 }
 
+const visualizeButton = document.getElementById("visualizeButton");
+if (visualizeButton) {
+  visualizeButton.addEventListener("click", loadRun);
+}
+
 async function loadProjects() {
   try {
-    let response = await fetch('/get_projects');
-    let projects = await response.json();
-    if (projects.error) throw new Error(projects.error);
-    console.log("Fetched projects:", projects);
-    let projectSelect = document.getElementById('projectSelect');
+    const response = await fetch('/api/projects');
+    const data = await response.json();
+    // clear and populate the projects dropdown
     projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
-    projects.forEach(project => {
-      let option = document.createElement('option');
-      option.value = project.value;
-      option.textContent = project.label;
-      projectSelect.appendChild(option);
-    });
-    projectSelect.disabled = false;
+    if (data.projects && data.projects.length > 0) {
+      data.projects.forEach(project => {
+        const option = document.createElement('option');
+        option.value = project;
+        option.textContent = project;
+        projectSelect.appendChild(option);
+      });
+    } else {
+      projectSelect.innerHTML = '<option value="" disabled selected>No projects available</option>';
+    }
+    return data.projects;
   } catch (error) {
-    console.error("Error fetching projects:", error);
-    alert("Failed to load projects.");
-    document.getElementById('projectSelect').innerHTML = '<option value="" disabled selected>Failed to load projects</option>';
+    console.error('Error loading projects:', error);
+    projectSelect.innerHTML = '<option value="" disabled selected>Error loading projects</option>';
+    return [];
   }
 }
 
 async function loadRuns(project) {
   try {
-    let response = await fetch('/get_runs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project })
-    });
-    let runs = await response.json();
-    if (runs.error) throw new Error(runs.error);
-    console.log("Fetched runs:", runs);
-    let runSelect = document.getElementById('runSelect');
+    console.log("Loading runs for project:", project);
+    const response = await fetch(`/api/${project}/runs`);
+    const data = await response.json();
+
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    console.log("Fetched runs data:", data);
+    const runSelect = document.getElementById('runSelect');
     runSelect.innerHTML = '<option value="" disabled selected>Select a run</option>';
-    runs.forEach(run => {
-      let option = document.createElement('option');
-      option.value = run.value;
-      option.textContent = run.label;
-      runSelect.appendChild(option);
-    });
-    runSelect.disabled = false;
-    document.getElementById('visualizeButton').disabled = false;
+
+    // Check if we have project_runs in the response and it's an array
+    if (data.project_runs && Array.isArray(data.project_runs)) {
+      data.project_runs.forEach(run => {
+        let option = document.createElement('option');
+        option.value = run.id;  // Changed from run.value to run.id based on API response
+        option.textContent = run.name;  // Changed from run.label to run.name based on API response
+        runSelect.appendChild(option);
+      });
+      runSelect.disabled = false;
+      document.getElementById('visualizeButton').disabled = false;
+    } else {
+      runSelect.innerHTML = '<option value="" disabled selected>No runs available</option>';
+      document.getElementById('visualizeButton').disabled = true;
+    }
+
   } catch (error) {
     console.error("Error fetching runs:", error);
-    alert("Failed to load runs.");
-    document.getElementById('runSelect').innerHTML = '<option value="" disabled selected>Failed to load runs</option>';
+    const runSelect = document.getElementById('runSelect');
+    runSelect.innerHTML = '<option value="" disabled selected>Failed to load runs</option>';
+    document.getElementById('visualizeButton').disabled = true;
+
+    // Show more informative error to user
+    alert(`Failed to load runs: ${error.message}`);
   }
 }
 
@@ -91,26 +149,22 @@ async function loadRun() {
   let selectedOption = runDropdown.options[runDropdown.selectedIndex];
   let run_id = selectedOption.value;
   let project_name = document.getElementById('projectSelect').value;
-  if (!run_id) {
-    alert("No run selected!");
+  if (!run_id || !project_name) {
+    alert("No run or project selected!");
     return;
   }
   try {
-    let response = await fetch('/visualize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ run_id, project: project_name })
-    });
+    let response = await fetch(`/api/${project_name}/${run_id}/visualize`);
     let data = await response.json();
     console.log("Received visualization data:", data);
     if (data.error) {
       alert("Error: " + data.error);
       return;
     }
-    
+
     // Visualize network layers (MACs, CMs, neurons, etc.)
     visualizeData(data.layers);
-    
+
     // Create the input grid using provided input dimensions
     if (data.input_dimensions && data.input_dimensions.width && data.input_dimensions.height) {
       createInputGrid(data.input_dimensions.width, data.input_dimensions.height);
@@ -151,10 +205,10 @@ function visualizeData(layers) {
     mouse = new THREE.Vector2();
     renderer.domElement.addEventListener('click', onDocumentMouseClick, false);
   }
-  
+
   const mac_spacing = 1.33;
   let macGroups = [];
-  
+
   // Create composite MAC groups from elements of type "mac"
   layers.forEach(element => {
     if (element.type === "mac") {
@@ -168,7 +222,7 @@ function visualizeData(layers) {
       // Use light red fill if active, otherwise transparent.
       // Explicitly check if active equals true or equals 1.
       const isActive = (element.active === true || element.active === 1);
-      const fillColor = 0xffcccc; 
+      const fillColor = 0xffcccc;
       const fillOpacity = isActive ? 1.0 : 0.0;
       const fillMaterial = new THREE.MeshBasicMaterial({
         color: fillColor,
@@ -188,7 +242,7 @@ function visualizeData(layers) {
       const outlineLine = new THREE.LineLoop(outlineGeometry, outlineMaterial);
       outlineLine.userData = { type: "mac_outline" };
       macGroup.add(outlineLine);
-      
+
       macGroup.userData = element;
       macGroup.userData.outlineLine = outlineLine;
       macGroup.userData.fillMesh = fillMesh;
@@ -199,7 +253,7 @@ function visualizeData(layers) {
       macGroups.push(macGroup);
     }
   });
-  
+
   // Attach "cm" and "neuron" elements to the nearest MAC group
   layers.forEach(element => {
     if (element.type === "cm" || element.type === "neuron") {
@@ -391,7 +445,7 @@ function resetToggledMACs() {
 
   // Clear the entire side panel.
   clearSidePanel();
-  
+
   // Also clear the cached canvas wrapper references on all MAC groups.
   clickableMACs.forEach(macGroup => {
     macGroup.userData.canvasWrapper = null;
@@ -405,30 +459,30 @@ function createMACCanvas(macGroup) {
   containerDiv.classList.add("mac-canvas-wrapper");
   const sidePanel = document.getElementById("side-panel");
   containerDiv.style.marginBottom = "10px";
-  
+
   const label = document.createElement("p");
   label.textContent = `MAC - Layer: ${((macGroup.userData.z / 10) + 1).toFixed(1)}`;
   label.style.margin = "0 0 5px 0";
   containerDiv.appendChild(label);
-  
+
   const topCanvas = document.createElement("canvas");
   topCanvas.width = 200;
   topCanvas.height = 200;
   topCanvas.style.border = "2px solid #ccc";
   containerDiv.appendChild(topCanvas);
-  
+
   const barGraphCanvas = document.createElement("canvas");
   barGraphCanvas.width = 200;
   barGraphCanvas.height = 100;
   barGraphCanvas.style.border = "1px solid #ccc";
   barGraphCanvas.style.marginTop = "5px";
   containerDiv.appendChild(barGraphCanvas);
-  
+
   sidePanel.appendChild(containerDiv);
-  
+
   createTopView(macGroup, topCanvas);
   renderBarGraph(macGroup, barGraphCanvas);
-  
+
   return containerDiv;
 }
 
@@ -437,7 +491,7 @@ function createMACCanvas(macGroup) {
 function createTopView(macGroup, canvas) {
   const topScene = new THREE.Scene();
   topScene.background = new THREE.Color(0xffffff);
-  
+
   const aspect = canvas.width / canvas.height;
   const viewSize = 5;
   const topCamera = new THREE.OrthographicCamera(
@@ -445,24 +499,24 @@ function createTopView(macGroup, canvas) {
   );
   topCamera.position.set(0, 0, 10);
   topCamera.lookAt(0, 0, 0);
-  
+
   const compositeClone = macGroup.clone(true);
   resetOutlineColor(compositeClone);
   const scaleFactor = 1.5;
   compositeClone.scale.set(scaleFactor, scaleFactor, scaleFactor);
   compositeClone.position.set(0, 0, 0);
   topScene.add(compositeClone);
-  
+
   // Create a render target for the snapshot.
   const renderTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height);
   sharedTopRenderer.setRenderTarget(renderTarget);
   sharedTopRenderer.render(topScene, topCamera);
   sharedTopRenderer.setRenderTarget(null);
-  
+
   // Read pixel data from the render target.
   const pixelBuffer = new Uint8Array(canvas.width * canvas.height * 4);
   sharedTopRenderer.readRenderTargetPixels(renderTarget, 0, 0, canvas.width, canvas.height, pixelBuffer);
-  
+
   // Create a temporary 2D canvas to transfer the image.
   const tempCanvas = document.createElement('canvas');
   tempCanvas.width = canvas.width;
@@ -472,12 +526,12 @@ function createTopView(macGroup, canvas) {
   imageData.data.set(pixelBuffer);
   flipImageDataVertically(imageData);
   tempCtx.putImageData(imageData, 0, 0);
-  
+
   // Draw the snapshot onto the target canvas.
   const ctx2d = canvas.getContext('2d');
   ctx2d.clearRect(0, 0, canvas.width, canvas.height);
   ctx2d.drawImage(tempCanvas, 0, 0);
-  
+
   renderTarget.dispose();
 }
 
@@ -522,7 +576,7 @@ function renderBarGraph(macGroup, canvas) {
     ctx.fillStyle = '#000';
     ctx.font = '10px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(`Bar ${index+1}`, x + (barWidth - 5)/2, canvas.height - 2);
+    ctx.fillText(`Bar ${index + 1}`, x + (barWidth - 5) / 2, canvas.height - 2);
   });
 }
 

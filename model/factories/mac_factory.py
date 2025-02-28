@@ -1,8 +1,6 @@
 import numpy as np
-from ..components.mac import MAC
-from .base_factory import ComponentFactory
-from ..components import CM
-from ..components import Neuron
+from model.components.mac import MAC
+from model.factories.base_factory import ComponentFactory
 
 class MACFactory(ComponentFactory):
     def create_component(self, x: float, y: float, z: float, active: bool = False):

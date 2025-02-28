@@ -16,3 +16,8 @@ __init__.py
 # env
 .env
 .DS_Storevenv/
+
+# local build
+sparsey_visualization_presentation.egg-info/
+
+ruf/

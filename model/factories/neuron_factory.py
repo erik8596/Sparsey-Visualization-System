@@ -1,6 +1,6 @@
 import numpy as np
-from ..components.neuron import Neuron
-from .base_factory import ComponentFactory
+from model.components.neuron import Neuron
+from model.factories.base_factory import ComponentFactory
 
 class NeuronFactory(ComponentFactory):
     def create_component(self, x: float, y: float, z: float):

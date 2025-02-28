@@ -19,4 +19,8 @@ class FlaskAppFactory:
         app.template_folder = str(view_dir / 'templates')
         app.static_folder = str(view_dir / 'static')
 
+        from controller.routes import api, views
+        app.register_blueprint(api)
+        app.register_blueprint(views)
+
         return app
