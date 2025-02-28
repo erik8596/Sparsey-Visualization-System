@@ -145,3 +145,11 @@ def visualize(project_name, run_id):
 
     except ValueError as e:
         return jsonify({"error": str(e)}), 500
+    
+
+@api.route('/status', methods=['GET'])
+def get_status():
+    """
+    Fetches a status of the current W&B project and run.
+    """
+    return jsonify(wbf.status())

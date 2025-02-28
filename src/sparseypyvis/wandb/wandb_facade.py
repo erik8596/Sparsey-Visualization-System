@@ -7,6 +7,24 @@ STS = "sparsey-testing-system"  # default weights and biases entity name
 
 @dataclass
 class WandBFacade:
+    """
+    A facade class for interacting with Weights & Biases (W&B) API.
+
+    This class provides a simplified interface for accessing W&B projects, runs, and configurations.
+    It implements the Singleton pattern to ensure only one instance manages W&B interactions.
+
+    Attributes:
+        project_name (str): Name of the current W&B project
+        run_name (str): Name of the current run
+        run_id (str): ID of the current run
+        entity (str): W&B entity/organization name
+        projects_list (list): Cached list of available projects
+        project_runs (list): Cached list of runs for current project
+        run_config (dict): Configuration of current run
+        project (object): Current W&B project object
+        run (object): Current W&B run object
+        mconf (ModelConfig): Model configuration handler
+    """
 
     project_name: str = None
     run_name: str = None
@@ -31,6 +49,7 @@ class WandBFacade:
         return cls._instance
 
     def api(self):
+        """Returns the W&B API instance."""
         return self._api
     
     def _handle_api_error(self, operation: str, error: Exception) -> None:
@@ -43,14 +62,14 @@ class WandBFacade:
         else:
             raise ValueError(f"Unexpected error during {operation}: {str(error)}")
         
-    def summary(self) -> str:
+    def status(self) -> str:
         """
         Returns a formatted string summary of current entity, project, and run.
         
         Returns:
             str: Summary string of current state
         """
-        return f"\nEntity: {self.entity}\nProject Id: {self.project_id} -> {self.project}\nRun Id: {self.run_id} -> {self.run}"
+        return f"Status:\nEntity: {self.entity}\nProject: {self.project_name}\nRun: {self.run_name}"
     
     def load_projects(self, entity_name: str = None) -> list:
         """
@@ -233,8 +252,7 @@ class WandBFacade:
         )
         
         try:
-            model_config = self.mconf.get_model_config(run=run)
-            return model_config
+            return self.mconf.get_model_config(run=run)
         except ValueError as e:
             print(f"Error loading model: {e}")
             return None
