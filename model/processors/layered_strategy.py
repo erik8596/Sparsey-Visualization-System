@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Dict, Any, List
+from dataclasses import dataclass, field
 import numpy as np
 from model.factories.mac_factory import MACFactory
 from model.factories.cm_factory import CMFactory
@@ -8,13 +9,13 @@ from model.components.mac import MAC
 from model.components.cm import CM
 from model.processors.base_strategy import VisualizationStrategy
 
+@dataclass
 class LayeredVisualizationStrategy(VisualizationStrategy):
     """Concrete strategy for layered visualization"""
 
-    def __init__(self):
-        self.mac_factory = MACFactory()
-        self.cm_factory = CMFactory()
-        self.neuron_factory = NeuronFactory()
+    mac_factory: MACFactory = field(default_factory=MACFactory)
+    cm_factory: CMFactory = field(default_factory=CMFactory)
+    neuron_factory: NeuronFactory = field(default_factory=NeuronFactory)
 
     def process(self, model_config: Dict[str, Any], mac_activations: Dict[str, Dict[int, int]]) -> Dict[str, Any]:
         visualization_data = []
@@ -59,7 +60,7 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
         cm_positions = self._get_cm_positions(x, y, params)
         for cm_pos in cm_positions.reshape(-1, 2):
             cm = self._create_cm_with_neurons(cm_pos[0], cm_pos[1], z, params)
-            mac.add_cm(cm)
+            mac.add_subcomponent(cm)
 
         return mac
 
@@ -82,7 +83,7 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
             neuron = self.neuron_factory.create_component(
                 neuron_pos[0], neuron_pos[1], z
             )
-            cm.add_neuron(neuron)
+            cm.add_subcomponent(neuron)
 
         return cm
 

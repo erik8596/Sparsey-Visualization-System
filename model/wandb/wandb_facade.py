@@ -256,3 +256,18 @@ class WandBFacade:
         except ValueError as e:
             print(f"Error loading model: {e}")
             return None
+        
+    def fetch_run_history(self, run_id: str = None, project_name: str = None, entity_name: str = None) -> List[Dict[str, Any]]:
+        """Fetch run history from W&B."""
+        run = self.run if (run_id == self.run_id) else self.fetch_run(
+            run_id or self.run_id,
+            project_name or self.project_name,
+            entity_name or self.entity
+        )
+
+        try:
+            self.run_history = run.scan_history()
+            return self.run_history
+        except Exception as e:
+            self._handle_api_error("run history fetching", e)
+            return []   

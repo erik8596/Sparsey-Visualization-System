@@ -1,11 +1,15 @@
-from .base_component import VisualizationComponent
+from dataclasses import dataclass
+from model.components import BaseComponent
 
-class Neuron(VisualizationComponent):
+@dataclass
+class Neuron(BaseComponent):
     """Represents a neuron (leaf node in composite)"""
-    def __init__(self, x: float, y: float, z: float):
-        self.x = x
-        self.y = y
-        self.z = z
+    x: float
+    y: float
+    z: float
+
+    def add_subcomponent(self, subcomponent: BaseComponent) -> None:
+        raise ValueError("Neuron is a leaf node and cannot have subcomponents.")
 
     def get_visualization_data(self):
         return [{

@@ -33,6 +33,22 @@ main {
   /* Adjust based on header height */
 }
 
+/* Hide scrollbar while maintaining functionality */
+::-webkit-scrollbar {
+  width: 0;
+  background: transparent;
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: none;
+}
+
+/* For IE/Edge */
+* {
+  -ms-overflow-style: none;
+}
+
 /* Three.js container styles */
 #threejs-container {
   flex: 1;
@@ -114,7 +130,7 @@ main {
   margin-top: 3px;
 }
 
-#bottom-panel {
+/* #bottom-panel {
   position: fixed;
   bottom: 0;
   left: 0;
@@ -125,4 +141,4 @@ main {
   box-sizing: border-box;
   border-top: 1px solid #ccc;
   z-index: 100;
-}
+} */

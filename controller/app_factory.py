@@ -16,9 +16,11 @@ class FlaskAppFactory:
         project_root = Path(__file__).parent.parent
         view_dir = project_root / 'view'
 
+        # set up template and static folders
         app.template_folder = str(view_dir / 'templates')
         app.static_folder = str(view_dir / 'static')
 
+        # register blueprints
         from controller.routes import api, views
         app.register_blueprint(api)
         app.register_blueprint(views)

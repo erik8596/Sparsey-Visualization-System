@@ -1,19 +1,23 @@
 from __future__ import annotations
 from typing import List
-from .base_component import VisualizationComponent
-from .cm import CM
+from dataclasses import dataclass, field
+from model.components import BaseComponent
+from model.components import CM
 
-class MAC(VisualizationComponent):
+@dataclass
+class MAC(BaseComponent):
     """Represents a MAC unit that can contain CMs"""
-    def __init__(self, x: float, y: float, z: float, active: bool = False):
-        self.x = x
-        self.y = y
-        self.z = z
-        self.active = active
-        self.cms: List[CM] = []
+    x: float
+    y: float
+    z: float
+    active: bool = False
+    cms: List[CM] = field(default_factory=list)
 
-    def add_cm(self, cm: CM):
-        self.cms.append(cm)
+    def add_subcomponent(self, subcomponent: BaseComponent) -> None:
+        if isinstance(subcomponent, CM):
+            self.cms.append(subcomponent)
+        else:
+            raise ValueError(f"Unsupported subcomponent type: {type(subcomponent)}.")
 
     def get_visualization_data(self):
         data = [{

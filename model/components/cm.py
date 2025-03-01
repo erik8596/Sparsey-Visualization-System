@@ -1,18 +1,22 @@
 from __future__ import annotations
 from typing import List
-from .base_component import VisualizationComponent
-from .neuron import Neuron
+from dataclasses import dataclass, field
+from model.components import Neuron
+from model.components import BaseComponent
 
-class CM(VisualizationComponent):
+@dataclass
+class CM(BaseComponent):
     """Represents a CM that can contain neurons"""
-    def __init__(self, x: float, y: float, z: float):
-        self.x = x
-        self.y = y
-        self.z = z
-        self.neurons: List[Neuron] = []
+    x: float
+    y: float 
+    z: float
+    neurons: List[Neuron] = field(default_factory=list)
 
-    def add_neuron(self, neuron: Neuron):
-        self.neurons.append(neuron)
+    def add_subcomponent(self, subcomponent: BaseComponent) -> None:
+        if isinstance(subcomponent, Neuron):
+            self.neurons.append(subcomponent)
+        else:
+            raise ValueError(f"Unsupported subcomponent type: {type(subcomponent)}.")
 
     def get_visualization_data(self):
         data = [{
@@ -24,3 +28,4 @@ class CM(VisualizationComponent):
         for neuron in self.neurons:
             data.extend(neuron.get_visualization_data())
         return data
+    

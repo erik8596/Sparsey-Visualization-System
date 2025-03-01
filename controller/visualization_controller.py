@@ -6,8 +6,8 @@ from flask import jsonify, Response
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-from model.wandb.wandb_facade import WandBFacade
-from model.processors.layered_strategy import LayeredVisualizationStrategy
+from model.wandb import WandBFacade
+from model.processors import LayeredVisualizationStrategy
 
 lvs = LayeredVisualizationStrategy()
 wbf = WandBFacade()
