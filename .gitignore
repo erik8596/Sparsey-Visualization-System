@@ -7,13 +7,23 @@ venv/
 # python cache files
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz
+*.pyzw
+*.pyzp
 
 # vs code
 .vscode/
 
-# python init files
-__init__.py
-
 # env
 .env
 .DS_Storevenv/
+
+# local build
+svs.egg-info/
+
+# ruf work
+ruf/

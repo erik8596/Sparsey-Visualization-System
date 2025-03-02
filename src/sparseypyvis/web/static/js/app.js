@@ -47,7 +47,33 @@ function setupUI() {
         const runSelect = document.getElementById('runSelect');
         runSelect.disabled = true;
         runSelect.innerHTML = '<option value="" disabled selected>Loading runs...</option>';
+        // Update project selection on server
+        fetch(`/api/update-project/${selectedProject}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'}
+        }).catch(error => {
+          console.error('Error updating project selection:', error);
+        });
+        console.log(`Updated project selection to ${selectedProject}`);
         loadRuns(selectedProject);
+      }
+    });
+  }
+
+  // RunSelect => loadRun
+  const runSelect = document.getElementById('runSelect');
+  if (runSelect) {
+    runSelect.addEventListener('change', function() {
+      const selectedRun = this.value;
+      if (selectedRun) {
+        // Update run selection on server
+        fetch(`/api/update-run/${projectSelect.value}/${selectedRun}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'}
+        }).catch(error => {
+          console.error('Error updating run selection:', error);
+        });
+        console.log(`Updated run selection to ${selectedRun}`);
       }
     });
   }
