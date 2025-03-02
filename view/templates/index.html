@@ -24,8 +24,9 @@
       <select id="runSelect" disabled>
         <option value="" disabled selected>Select a project first</option>
       </select>
-      <button id="visualizeButton" onclick="loadRun()" disabled>Visualize</button>
+      <button id="visualizeButton" disabled>Visualize</button>
     </div>
+
     <!-- MAC Details, Reset Button, and Instruction Message Container -->
     <div id="mac-details-container">
       <div id="mac-details-row">
@@ -37,9 +38,17 @@
   </header>
 
   <main>
-    <!-- Container for the main Three.js scene -->
-    <div id="threejs-container"></div>
-    <!-- Side panel for dynamic canvases (without the message) -->
+    <!-- Container for the main Three.js scene wrapped in a relative container -->
+    <div id="canvas-container">
+      <div id="threejs-container"></div>
+      <!-- Overlay for camera controls -->
+      <div id="camera-controls">
+        <button id="panButton">Pan Mode</button>
+        <button id="bothButton">Default Mode</button>
+        <button id="resetControls">Reset Camera</button>
+      </div>
+    </div>
+    <!-- Side panel for dynamic canvases (unchanged) -->
     <div id="side-panel">
       <!-- Additional side panel content can go here -->
     </div>
@@ -48,6 +57,11 @@
     </div>
   </main>
 
+<<<<<<<< HEAD:view/templates/index.html
   <script type="module" src="/static/js/main.js"></script>
+========
+  <!-- Load our new main entry file (ES module) -->
+  <script type="module" src="/static/js/app.js"></script>
+>>>>>>>> v0.1:src/sparseypyvis/web/templates/index.html
 </body>
 </html>

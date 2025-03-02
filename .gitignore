@@ -6,6 +6,14 @@ venv/
 
 # python cache files
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz
+*.pyzw
+*.pyzp
 
 # vs code
 .vscode/
@@ -15,8 +23,15 @@ __pycache__/
 .DS_Storevenv/
 
 # local build
+<<<<<<< HEAD
 sparsey_visualization_presentation.egg-info/
 
 ruf/
 
 model/grid_utils.py
+=======
+svs.egg-info/
+
+# ruf work
+ruf/
+>>>>>>> v0.1
