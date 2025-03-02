@@ -1,6 +1,6 @@
 import numpy as np
-from model.components.cm import CM
-from model.factories import ComponentFactory
+from src.core.model.components import CM
+from src.core.model.factories import ComponentFactory
 
 class CMFactory(ComponentFactory):
     def create_component(self, x: float, y: float, z: float):

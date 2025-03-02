@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
-from model.wandb.wandb_facade import WandBFacade
-from model.processors.layered_strategy import LayeredVisualizationStrategy
+from src.core.model.wandb.wandb_facade import WandBFacade
+from src.core.model.processors.layered_strategy import LayeredVisualizationStrategy
 
 api = Blueprint('api', __name__, url_prefix='/api')
 

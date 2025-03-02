@@ -1,7 +1,7 @@
 import wandb
 from typing import List, Dict, Any
 from dataclasses import dataclass, field
-from model.wandb.model_config import ModelConfig
+from src.core.model.wandb.model_config import ModelConfig
 
 STS = "sparsey-testing-system"  # default weights and biases entity name
 

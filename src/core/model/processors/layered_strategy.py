@@ -2,12 +2,9 @@ from __future__ import annotations
 from typing import Dict, Any, List
 from dataclasses import dataclass, field
 import numpy as np
-from model.factories.mac_factory import MACFactory
-from model.factories.cm_factory import CMFactory
-from model.factories.neuron_factory import NeuronFactory
-from model.components.mac import MAC
-from model.components.cm import CM
-from model.processors.base_strategy import VisualizationStrategy
+from src.core.model.factories import MACFactory, CMFactory, NeuronFactory
+from src.core.model.components import MAC, CM, Neuron
+from src.core.model.processors import VisualizationStrategy
 
 @dataclass
 class LayeredVisualizationStrategy(VisualizationStrategy):

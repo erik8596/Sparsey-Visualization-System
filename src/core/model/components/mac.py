@@ -1,8 +1,7 @@
 from __future__ import annotations
 from typing import List
 from dataclasses import dataclass, field
-from model.components import BaseComponent
-from model.components import CM
+from src.core.model.components import BaseComponent, CM
 
 @dataclass
 class MAC(BaseComponent):

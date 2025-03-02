@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from model.components import BaseComponent
+from src.core.model.components import BaseComponent
 
 @dataclass
 class Neuron(BaseComponent):

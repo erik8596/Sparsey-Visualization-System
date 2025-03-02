@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import List
 from dataclasses import dataclass, field
-from model.components import Neuron
-from model.components import BaseComponent
+from src.core.model.components import Neuron
+from src.core.model.components import BaseComponent
 
 @dataclass
 class CM(BaseComponent):

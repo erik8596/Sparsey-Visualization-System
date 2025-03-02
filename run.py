@@ -1,9 +1,9 @@
-from controller import FlaskAppFactory
+from src.web import create_app
 from os import environ
 
-app = FlaskAppFactory.create_app()
+app = create_app()
 
 if __name__ == "__main__":
     app.run(port=int(environ.get("PORT", 5000)), 
-            debug=True            
-        )
+            debug=app.config.get("FLASK_DEBUG")
+            )

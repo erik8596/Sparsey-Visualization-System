@@ -1,6 +1,6 @@
 import numpy as np
-from model.components.mac import MAC
-from model.factories import ComponentFactory
+from src.core.model.components import MAC
+from src.core.model.factories import ComponentFactory
 
 class MACFactory(ComponentFactory):
     def create_component(self, x: float, y: float, z: float, active: bool = False):
