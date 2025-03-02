@@ -21,7 +21,7 @@ export class BaseElementFactory {
     }
   
     drawCircle(shape, radius) {
-      const numSegments = 20;
+      const numSegments = 8;
       for (let i = 0; i < numSegments; i++) {
         const angle = (Math.PI * 2 / numSegments) * i;
         const x = radius * Math.cos(angle);
