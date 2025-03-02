@@ -6,6 +6,7 @@ venv/
 
 # python cache files
 __pycache__/
+*.pyc
 
 # vs code
 .vscode/
