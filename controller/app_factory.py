@@ -1,6 +1,8 @@
 from flask import Flask
 from pathlib import Path
 from typing import Optional
+from controller.routes.api import api  # Import the blueprint instance, not the module
+from controller.routes.views import views
 
 class FlaskAppFactory:
     """Factory for creating Flask application instances"""
@@ -20,8 +22,7 @@ class FlaskAppFactory:
         app.template_folder = str(view_dir / 'templates')
         app.static_folder = str(view_dir / 'static')
 
-        # register blueprints
-        from controller.routes import api, views
+        # Register blueprints
         app.register_blueprint(api)
         app.register_blueprint(views)
 
