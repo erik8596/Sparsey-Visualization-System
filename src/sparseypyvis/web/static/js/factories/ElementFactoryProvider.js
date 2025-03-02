@@ -1,6 +1,6 @@
 // /static/js/factories/ElementFactoryProvider.js
 import { MacFactory } from './MacFactory.js';
-import { CmFactory } from './CMFactory.js';
+import { CmFactory } from './CmFactory.js';
 import { NeuronFactory } from './NeuronFactory.js';
 
 export function getElementFactory(type) {
