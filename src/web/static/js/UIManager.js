@@ -35,16 +35,68 @@ export class UIManager {
     this.selectedMACs = [];
 
     const macGroups = [];
+    const mac_spacing = 1.33;
+
+    // Calculate center point of all elements
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+
+    layers.forEach(element => {
+      minX = Math.min(minX, element.x);
+      maxX = Math.max(maxX, element.x);
+      minY = Math.min(minY, element.y);
+      maxY = Math.max(maxY, element.y);
+      minZ = Math.min(minZ, element.z);
+      maxZ = Math.max(maxZ, element.z);
+    });
+
+    // Calculate center offsets
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const centerZ = (minZ + maxZ) / 2;
 
     // First pass: create MAC composites
     layers.forEach(element => {
       if (element.type === 'mac') {
-        const factory = getElementFactory('mac');
-        if (!factory) return;
-        const macGroup = factory.createElement(element);
+        const macGroup = new THREE.Group();
+        const shape = new THREE.Shape();
+        this.drawHexagon(shape, 2.0); // Adjust MAC size as needed
 
-        const mac_spacing = 1.33;
-        macGroup.position.set(element.x, element.y * mac_spacing, element.z);
+        // Create a fill mesh
+        const fillGeometry = new THREE.ShapeGeometry(shape);
+        const isActive = (element.active === true || element.active === 1);
+        const fillColor = 0xffcccc;
+        const fillOpacity = isActive ? 1.0 : 0.0;
+        const fillMaterial = new THREE.MeshBasicMaterial({
+          color: fillColor,
+          transparent: true,
+          opacity: fillOpacity,
+          side: THREE.DoubleSide
+        });
+        const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
+        fillMesh.position.z = -0.01;
+        macGroup.add(fillMesh);
+
+        // Create an outline
+        const points = shape.getPoints();
+        const outlineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+        const outlineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
+        const outlineLine = new THREE.LineLoop(outlineGeometry, outlineMaterial);
+        outlineLine.userData = { type: 'mac_outline' };
+        macGroup.add(outlineLine);
+
+        macGroup.userData = element;
+        macGroup.userData.outlineLine = outlineLine;
+        macGroup.userData.fillMesh = fillMesh;
+        macGroup.userData.originalZ = element.z - centerZ;
+        
+        // Center the position
+        macGroup.position.set(
+          element.x - centerX,
+          (element.y - centerY) * mac_spacing,
+          element.z - centerZ
+        );
 
         this.sceneManager.add(macGroup);
         this.clickableMACs.push(macGroup);
@@ -55,20 +107,40 @@ export class UIManager {
     // Second pass: create CM/neuron objects
     layers.forEach(element => {
       if (element.type === 'cm' || element.type === 'neuron') {
-        const factory = getElementFactory(element.type);
-        if (!factory) return;
-        const obj = factory.createElement(element);
+        let object;
+        if (element.type === 'cm') {
+          const shape = new THREE.Shape();
+          this.drawHexagon(shape, 0.5);
+          const points = shape.getPoints();
+          const geometry = new THREE.BufferGeometry().setFromPoints(points);
+          const material = new THREE.LineBasicMaterial({ color: 0x0000FF, linewidth: 2 });
+          object = new THREE.LineLoop(geometry, material);
+        } else if (element.type === 'neuron') {
+          const shape = new THREE.Shape();
+          this.drawCircle(shape, 0.10);
+          const points = shape.getPoints();
+          const geometry = new THREE.BufferGeometry().setFromPoints(points);
+          const material = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
+          object = new THREE.LineLoop(geometry, material);
+        }
 
-        const mac_spacing = 1.33;
-        obj.position.set(element.x, element.y * mac_spacing, element.z);
+        object.userData = element;
+        object.userData.type = element.type;
+        
+        // Center the position
+        object.position.set(
+          element.x - centerX,
+          (element.y - centerY) * mac_spacing,
+          element.z - centerZ
+        );
 
         // Attach to nearest MAC
         let closestMac = null;
         let minDistance = Infinity;
         macGroups.forEach(macGroup => {
-          if (Math.abs(macGroup.position.z - obj.position.z) < 0.001) {
-            const dx = macGroup.position.x - obj.position.x;
-            const dy = macGroup.position.y - obj.position.y;
+          if (Math.abs(macGroup.position.z - object.position.z) < 0.001) {
+            const dx = macGroup.position.x - object.position.x;
+            const dy = macGroup.position.y - object.position.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < minDistance) {
               minDistance = dist;
@@ -78,10 +150,10 @@ export class UIManager {
         });
 
         if (closestMac) {
-          obj.position.sub(closestMac.position);
-          closestMac.add(obj); // composite add
+          object.position.sub(closestMac.position);
+          closestMac.add(object);
         } else {
-          this.sceneManager.add(obj);
+          this.sceneManager.add(object);
         }
       }
     });
@@ -253,6 +325,11 @@ export class UIManager {
   }
 
   createTopView(macGroup, canvas) {
+    if (!this.sharedTopRenderer) {
+      console.error('Shared top renderer not initialized');
+      return;
+    }
+
     const topScene = new THREE.Scene();
     topScene.background = new THREE.Color(0xffffff);
 
@@ -271,28 +348,32 @@ export class UIManager {
     compositeClone.position.set(0, 0, 0);
     topScene.add(compositeClone);
 
-    const renderTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height);
-    this.sharedTopRenderer.setRenderTarget(renderTarget);
-    this.sharedTopRenderer.render(topScene, topCamera);
-    this.sharedTopRenderer.setRenderTarget(null);
+    try {
+      const renderTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height);
+      this.sharedTopRenderer.setRenderTarget(renderTarget);
+      this.sharedTopRenderer.render(topScene, topCamera);
+      this.sharedTopRenderer.setRenderTarget(null);
 
-    const pixelBuffer = new Uint8Array(canvas.width * canvas.height * 4);
-    this.sharedTopRenderer.readRenderTargetPixels(renderTarget, 0, 0, canvas.width, canvas.height, pixelBuffer);
+      const pixelBuffer = new Uint8Array(canvas.width * canvas.height * 4);
+      this.sharedTopRenderer.readRenderTargetPixels(renderTarget, 0, 0, canvas.width, canvas.height, pixelBuffer);
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    const tempCtx = tempCanvas.getContext('2d');
-    const imageData = tempCtx.createImageData(canvas.width, canvas.height);
-    imageData.data.set(pixelBuffer);
-    this.flipImageDataVertically(imageData);
-    tempCtx.putImageData(imageData, 0, 0);
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      const imageData = tempCtx.createImageData(canvas.width, canvas.height);
+      imageData.data.set(pixelBuffer);
+      this.flipImageDataVertically(imageData);
+      tempCtx.putImageData(imageData, 0, 0);
 
-    const ctx2d = canvas.getContext('2d');
-    ctx2d.clearRect(0, 0, canvas.width, canvas.height);
-    ctx2d.drawImage(tempCanvas, 0, 0);
+      const ctx2d = canvas.getContext('2d');
+      ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+      ctx2d.drawImage(tempCanvas, 0, 0);
 
-    renderTarget.dispose();
+      renderTarget.dispose();
+    } catch (error) {
+      console.error('Error creating top view:', error);
+    }
   }
 
   renderBarGraph(macGroup, canvas) {
@@ -316,7 +397,7 @@ export class UIManager {
       ctx.strokeRect(x, y, fixedBarWidth, barHeight);
 
       ctx.fillStyle = '#000';
-      ctx.font = '10px Arial';
+      ctx.font = '10px Helvetica';
       ctx.textAlign = 'center';
       ctx.fillText(index + 1, x + fixedBarWidth / 2, canvas.height - 2);
     });
@@ -432,5 +513,34 @@ Position: (${macData.position.x.toFixed(2)}, ${macData.position.y.toFixed(2)}, $
 
   addBottomPanelCanvas(canvas) {
     this.bottomPanelContainer.appendChild(canvas);
+  }
+
+  drawHexagon(shape, size) {
+    for (let i = 0; i < 6; i++) {
+      let angle = (Math.PI / 3) * i;
+      let x = size * Math.cos(angle);
+      let y = size * Math.sin(angle);
+      if (i === 0) {
+        shape.moveTo(x, y);
+      } else {
+        shape.lineTo(x, y);
+      }
+    }
+    shape.closePath();
+  }
+
+  drawCircle(shape, radius) {
+    const numSegments = 20;
+    for (let i = 0; i < numSegments; i++) {
+      let angle = (Math.PI * 2 / numSegments) * i;
+      let x = radius * Math.cos(angle);
+      let y = radius * Math.sin(angle);
+      if (i === 0) {
+        shape.moveTo(x, y);
+      } else {
+        shape.lineTo(x, y);
+      }
+    }
+    shape.closePath();
   }
 }

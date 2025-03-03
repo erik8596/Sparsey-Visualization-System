@@ -38,7 +38,15 @@
 
   <main>
     <!-- Container for the main Three.js scene -->
-    <div id="threejs-container"></div>
+    <div id="threejs-container">
+      <!-- Camera control pane nested within the Three.js container -->
+      <div id="camera-control-pane">
+        <button id="panButton">Pan Mode</button>
+        <button id="bothButton">Default Mode</button>
+        <button id="resetControls">Reset Camera</button>
+      </div>
+    </div>
+
     <!-- Side panel for dynamic canvases (without the message) -->
     <div id="side-panel">
       <!-- Additional side panel content can go here -->

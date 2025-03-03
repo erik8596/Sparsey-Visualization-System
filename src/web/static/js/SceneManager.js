@@ -6,30 +6,40 @@ export class SceneManager {
   constructor() {
     // Create scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x222222);  // should reset it back to white when needed
+    this.scene.background = new THREE.Color(0xffffff);  // White background
+
+    // Get container dimensions
+    const container = document.getElementById('threejs-container');
+    const width = container.clientWidth;
+    const height = container.clientHeight;
 
     // Create camera
     this.camera = new THREE.PerspectiveCamera(
       75, // Field of view
-      window.innerWidth / window.innerHeight, // Aspect ratio
+      width / height, // Aspect ratio
       0.1, // Near plane
       1000 // Far plane
     );
-    this.camera.position.z = 5;
+    // Position camera at z=100 to ensure it's behind all layers
+    this.camera.position.set(0, 0, 100);
 
     // Create renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    const container = document.getElementById('threejs-container');
+    this.renderer.setSize(width, height);
     container.appendChild(this.renderer.domElement);
+
+    // Create shared top renderer for side panel snapshots
+    this.sharedTopRenderer = new THREE.WebGLRenderer({ antialias: true });
+    this.sharedTopRenderer.setSize(200, 200);
+    this.sharedTopRenderer.setClearColor(0xffffff, 1);
 
     // Create OrbitControls
     this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
     this.controls.screenSpacePanning = false;
-    this.controls.minDistance = 1;
-    this.controls.maxDistance = 50;
+    this.controls.minDistance = 10;
+    this.controls.maxDistance = 200;
 
     // Create raycaster and mouse vector for interaction
     this.raycaster = new THREE.Raycaster();
@@ -48,16 +58,73 @@ export class SceneManager {
   setupEventListeners() {
     window.addEventListener('resize', () => this.onWindowResize(), false);
 
-    // Instead of direct toggling, we publish an event "sceneClicked"
+    // Handle scene clicks
     this.renderer.domElement.addEventListener('click', (event) => {
       eventBus.notify('sceneClicked', event);
     });
+
+    // Setup camera control buttons
+    const panButton = document.getElementById('panButton');
+    if (panButton) {
+      panButton.addEventListener('click', () => {
+        this.controls.enableRotate = false;
+        this.controls.enablePan = true;
+        this.controls.mouseButtons = {
+          LEFT: THREE.MOUSE.PAN,
+          MIDDLE: THREE.MOUSE.DOLLY,
+          RIGHT: THREE.MOUSE.PAN
+        };
+        console.log("Pan mode enabled");
+      });
+    }
+
+    const bothButton = document.getElementById('bothButton');
+    if (bothButton) {
+      bothButton.addEventListener('click', () => {
+        this.controls.enableRotate = true;
+        this.controls.enablePan = true;
+        this.controls.mouseButtons = {
+          LEFT: THREE.MOUSE.ROTATE,
+          MIDDLE: THREE.MOUSE.DOLLY,
+          RIGHT: THREE.MOUSE.PAN
+        };
+        // Reset angle limitations
+        this.controls.minAzimuthAngle = -Infinity;
+        this.controls.maxAzimuthAngle = Infinity;
+        this.controls.minPolarAngle = 0;
+        this.controls.maxPolarAngle = Math.PI;
+        console.log("Default mode enabled (rotate & pan)");
+      });
+    }
+
+    const resetControls = document.getElementById('resetControls');
+    if (resetControls) {
+      resetControls.addEventListener('click', () => {
+        this.controls.enableRotate = true;
+        this.controls.enablePan = true;
+        this.controls.mouseButtons = {
+          LEFT: THREE.MOUSE.ROTATE,
+          MIDDLE: THREE.MOUSE.DOLLY,
+          RIGHT: THREE.MOUSE.PAN
+        };
+        this.controls.minAzimuthAngle = -Infinity;
+        this.controls.maxAzimuthAngle = Infinity;
+        this.controls.minPolarAngle = 0;
+        this.controls.maxPolarAngle = Math.PI;
+        this.controls.reset();
+        console.log("Controls reset");
+      });
+    }
   }
 
   onWindowResize() {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
+    const container = document.getElementById('threejs-container');
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setSize(width, height);
   }
 
   animate() {
