@@ -20,3 +20,5 @@ sparsey_visualization_presentation.egg-info/
 ruf/
 
 model/grid_utils.py
+
+src/web/static/js/explusion/

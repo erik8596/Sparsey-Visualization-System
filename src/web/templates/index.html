@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sparsey Visualization</title>
+  <!-- Three.js Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- OrbitControls for Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Sparsey Visualization</h1>
+    <!-- Project and Run Selection -->
+    <div class="controls">
+      <label for="projectSelect">Select W&B Project:</label>
+      <select id="projectSelect">
+        <option value="" disabled selected>Loading projects...</option>
+      </select>
+      <label for="runSelect">Select W&B Run:</label>
+      <select id="runSelect" disabled>
+        <option value="" disabled selected>Select a project first</option>
+      </select>
+      <button id="visualizeButton" disabled>Visualize</button>
+    </div>
+    <!-- MAC Details, Reset Button, and Instruction Message Container -->
+    <div id="mac-details-container">
+      <div id="mac-details-row">
+        <div id="mac-details-header">MAC Details</div>
+        <button id="resetButton">Reset Toggled MACs</button>
+      </div>
+      <div id="mac-details-msg">(Click on a MAC to see its details)</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Container for the main Three.js scene -->
+    <div id="threejs-container">
+      <!-- Camera control pane nested within the Three.js container -->
+      <div id="camera-control-pane">
+        <button id="panButton">Pan Mode</button>
+        <button id="bothButton">Default Mode</button>
+        <button id="resetControls">Reset Camera</button>
+      </div>
+    </div>
+
+    <!-- Side panel for dynamic canvases (without the message) -->
+    <div id="side-panel">
+      <!-- Additional side panel content can go here -->
+    </div>
+    <div id="bottom-panel">
+      <!-- Bottom panel content can go here -->
+    </div>
+  </main>
+
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
