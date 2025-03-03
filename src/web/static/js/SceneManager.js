@@ -20,8 +20,7 @@ export class SceneManager {
       0.1, // Near plane
       1000 // Far plane
     );
-    // Position camera at z=100 to ensure it's behind all layers
-    this.camera.position.set(0, 0, 100);
+    this.camera.position.set(0, 0, 50);
 
     // Create renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -37,9 +36,13 @@ export class SceneManager {
     this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.screenSpacePanning = false;
-    this.controls.minDistance = 10;
     this.controls.maxDistance = 200;
+    this.controls.screenSpacePanning = false;
+    this.controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
 
     // Create raycaster and mouse vector for interaction
     this.raycaster = new THREE.Raycaster();
