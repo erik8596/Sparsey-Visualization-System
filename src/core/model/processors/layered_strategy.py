@@ -2,9 +2,12 @@ from __future__ import annotations
 from typing import Dict, Any, List
 from dataclasses import dataclass, field
 import numpy as np
+import logging
 from src.core.model.factories import MACFactory, CMFactory, NeuronFactory
 from src.core.model.components import MAC, CM, Neuron
 from src.core.model.processors import VisualizationStrategy
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class LayeredVisualizationStrategy(VisualizationStrategy):
@@ -14,17 +17,20 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
     cm_factory: CMFactory = field(default_factory=CMFactory)
     neuron_factory: NeuronFactory = field(default_factory=NeuronFactory)
 
-    def process(self, model_config: Dict[str, Any], mac_activations: Dict[str, Dict[int, int]]) -> Dict[str, Any]:
+    def process(self, model_config: Dict[str, Any], mac_activations: Dict[str, Dict[int, int]],
+                input_activations: Dict[int, int] = None) -> Dict[str, Any]:
         visualization_data = []
 
-        for idx, (layer_name, layer_dict) in enumerate(model_config.items()):
+        # Process regular layers (no more input layer creation)
+        for idx, (layer_name, layer_dict) in enumerate(model_config.items(), 1):
             visualization_data.extend(
                 self._process_layer(idx, layer_name, layer_dict, mac_activations)
             )
 
         return {
             "layers": visualization_data,
-            "input_dimensions": self._get_input_dimensions(model_config)
+            "input_dimensions": self._get_input_dimensions(model_config),
+            "input_activations": input_activations or {}  # Include input activations in return data
         }
 
     def _process_layer(self, idx: int, layer_name: str, layer_dict: Dict[str, Any],
@@ -68,7 +74,7 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
         )
 
     def _create_cm_with_neurons(self, x: float, y: float, z: float,
-                                params: Dict[str, Any]) -> 'CM':
+                                params: Dict[str, Any], neuron_activations: Dict[int, Dict[str, Any]] = None) -> 'CM':
         cm = self.cm_factory.create_component(x, y, z)
 
         neuron_positions = self.neuron_factory.calculate_positions(
@@ -76,9 +82,16 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
             params.get("num_neurons_per_cm", 1)
         )
 
-        for neuron_pos in neuron_positions.reshape(-1, 2):
+        for i, neuron_pos in enumerate(neuron_positions.reshape(-1, 2)):
+            neuron_data = neuron_activations.get(i, {}) if neuron_activations else {}
+            raw_val = neuron_data.get('raw', 0.0)
+            avg_val = neuron_data.get('avg', 0.0)
+
             neuron = self.neuron_factory.create_component(
-                neuron_pos[0], neuron_pos[1], z
+                neuron_pos[0], neuron_pos[1], z,
+                active=bool(raw_val > 0),
+                raw_activation=raw_val,
+                avg_activation=avg_val
             )
             cm.add_subcomponent(neuron)
 

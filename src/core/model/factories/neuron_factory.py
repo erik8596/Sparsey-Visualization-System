@@ -3,8 +3,9 @@ from src.core.model.components.neuron import Neuron
 from src.core.model.factories import ComponentFactory
 
 class NeuronFactory(ComponentFactory):
-    def create_component(self, x: float, y: float, z: float):
-        return Neuron(x, y, z)
+    def create_component(self, x: float, y: float, z: float, active: bool = False,
+                        raw_activation: float = 0.0, avg_activation: float = 0.0):
+        return Neuron(x, y, z, active, raw_activation, avg_activation)
 
     def calculate_positions(self, cm_positions: np.ndarray, num_neurons: int):
         if num_neurons > 1:

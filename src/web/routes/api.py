@@ -130,15 +130,19 @@ def visualize(project_name, run_id):
     Fetches the visualization data for a specific run.
     """
     try:
-            model_data = wbf.get_processed_model_config(run_id, project_name)
-            # print(f"Model data: {model_data}")
-            visualization_data = lvs.process(
-                model_data.layers,
-                model_data.mac_activations
-            )
-            return jsonify(visualization_data)
+        model_data = wbf.get_processed_model_config(run_id, project_name)
+        if not model_data or not model_data.layers:
+            return jsonify({"error": "No model configuration data available"}), 500
 
-    except ValueError as e:
+        visualization_data = lvs.process(
+            model_data.layers,
+            model_data.mac_activations,
+            model_data.input_activations
+        )
+        return jsonify(visualization_data)
+
+    except Exception as e:
+        print(f"Error during visualization: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 

@@ -7,6 +7,9 @@ class Neuron(BaseComponent):
     x: float
     y: float
     z: float
+    active: bool = False
+    raw_activation: float = 0.0
+    avg_activation: float = 0.0
 
     def add_subcomponent(self, subcomponent: BaseComponent) -> None:
         raise ValueError("Neuron is a leaf node and cannot have subcomponents.")
@@ -16,5 +19,8 @@ class Neuron(BaseComponent):
             "type": "neuron",
             "x": self.x,
             "y": self.y,
-            "z": self.z
+            "z": self.z,
+            "active": self.active,
+            "raw_activation": self.raw_activation,
+            "avg_activation": self.avg_activation
         }]

@@ -12,7 +12,7 @@ import { loadProjects, loadRuns, loadRun } from './DataLoader.js';
 // We'll have some global references to the managers
 let sceneManager, uiManager;
 
-window.onload = async function() {
+window.onload = async function () {
   // 1) Initialize the Scene
   sceneManager = new SceneManager('threejs-container');
 
@@ -41,7 +41,7 @@ function setupUI() {
   // ProjectSelect => loadRuns
   const projectSelect = document.getElementById('projectSelect');
   if (projectSelect) {
-    projectSelect.addEventListener('change', function() {
+    projectSelect.addEventListener('change', function () {
       const selectedProject = this.value;
       if (selectedProject) {
         document.getElementById('visualizeButton').disabled = true;
@@ -51,7 +51,7 @@ function setupUI() {
         // Update project selection on server
         fetch(`/api/update-project/${selectedProject}`, {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'}
+          headers: { 'Content-Type': 'application/json' }
         }).catch(error => {
           console.error('Error updating project selection:', error);
         });
@@ -64,13 +64,13 @@ function setupUI() {
   // RunSelect => loadRun
   const runSelect = document.getElementById('runSelect');
   if (runSelect) {
-    runSelect.addEventListener('change', function() {
+    runSelect.addEventListener('change', function () {
       const selectedRun = this.value;
       if (selectedRun) {
         // Update run selection on server
         fetch(`/api/update-run/${projectSelect.value}/${selectedRun}`, {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'}
+          headers: { 'Content-Type': 'application/json' }
         }).catch(error => {
           console.error('Error updating run selection:', error);
         });
@@ -152,7 +152,7 @@ eventBus.subscribe('newVisualizationData', (data) => {
   // If we have valid input_dimensions, create the input grid
   const dims = data.input_dimensions;
   if (dims && dims.width && dims.height) {
-    uiManager.createInputGrid(dims.width, dims.height);
+    uiManager.createInputGrid(dims.width, dims.height, data.input_activations);
   } else {
     console.error("Invalid input dimensions:", dims);
   }
