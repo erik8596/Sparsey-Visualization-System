@@ -61,13 +61,17 @@ export class UIManager {
       if (element.type === 'mac') {
         const macGroup = new THREE.Group();
         const shape = new THREE.Shape();
-        this.drawHexagon(shape, 2.0); // Adjust MAC size as needed
+        this.drawHexagon(shape, 2.0); // Restore original MAC size to 2.0
 
         // Create a fill mesh
         const fillGeometry = new THREE.ShapeGeometry(shape);
         const isActive = (element.active === true || element.active === 1);
-        const fillColor = 0xffcccc;
-        const fillOpacity = isActive ? 1.0 : 0.0;
+
+        // Get MAC activation value if available
+        const intensity = element.raw_activation || 0;
+        const fillColor = isActive ? new THREE.Color(1.0, 0, 0) : new THREE.Color(0xcccccc); // Restore red color for active MACs
+        const fillOpacity = isActive ? 0.8 : 0.2;
+
         const fillMaterial = new THREE.MeshBasicMaterial({
           color: fillColor,
           transparent: true,
@@ -77,6 +81,14 @@ export class UIManager {
         const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
         fillMesh.position.z = -0.01;
         macGroup.add(fillMesh);
+
+        // Store activation data in userData
+        if (element.raw_activation !== undefined) {
+          macGroup.userData.raw_activation = element.raw_activation;
+        }
+        if (element.avg_activation !== undefined) {
+          macGroup.userData.avg_activation = element.avg_activation;
+        }
 
         // Create an outline
         const points = shape.getPoints();
@@ -120,36 +132,27 @@ export class UIManager {
           this.drawCircle(shape, 0.10);
 
           if (element.active) {
-            // For active neurons: filled green circle with black outline
+            // Active neuron visualization
             const fillGeometry = new THREE.ShapeGeometry(shape);
+            // Add visual feedback for raw activation value
+            const intensity = element.raw_activation || 0;
+            const color = new THREE.Color(0, intensity, 0);  // Green with varying intensity
             const fillMaterial = new THREE.MeshBasicMaterial({
-              color: 0x00ff00,  // Changed from red (0xff0000) to green (0x00ff00)
+              color: color,
               side: THREE.DoubleSide,
               transparent: true,
-              opacity: 0.8  // Added slight transparency
+              opacity: 0.8
             });
             object = new THREE.Mesh(fillGeometry, fillMaterial);
-
-            // Add black outline with increased width for better visibility
-            const outlinePoints = shape.getPoints();
-            const outlineGeometry = new THREE.BufferGeometry().setFromPoints(outlinePoints);
-            const outlineMaterial = new THREE.LineBasicMaterial({
-              color: 0x000000,
-              linewidth: 2,
-              transparent: true,
-              opacity: 1.0
-            });
-            const outline = new THREE.LineLoop(outlineGeometry, outlineMaterial);
-            object.add(outline);
           } else {
-            // For inactive neurons: just lighter black outline
+            // For inactive neurons: very subtle grey
             const points = shape.getPoints();
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
             const material = new THREE.LineBasicMaterial({
-              color: 0x444444,  // Changed to lighter color for inactive neurons
+              color: 0x444444,
               linewidth: 1,
               transparent: true,
-              opacity: 0.5
+              opacity: 0.2  // More transparent
             });
             object = new THREE.LineLoop(geometry, material);
           }

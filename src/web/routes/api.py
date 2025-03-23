@@ -126,9 +126,7 @@ def get_run_history(project_name, run_id):
 
 @api.route('/<project_name>/<run_id>/visualize', methods=['GET'])
 def visualize(project_name, run_id):
-    """
-    Fetches the visualization data for a specific run.
-    """
+    """Fetches the visualization data for a specific run."""
     try:
         model_data = wbf.get_processed_model_config(run_id, project_name)
         if not model_data or not model_data.layers:
@@ -137,7 +135,8 @@ def visualize(project_name, run_id):
         visualization_data = lvs.process(
             model_data.layers,
             model_data.mac_activations,
-            model_data.input_activations
+            model_data.input_activations,
+            model_data.neuron_activations  # Pass neuron activations
         )
         return jsonify(visualization_data)
 

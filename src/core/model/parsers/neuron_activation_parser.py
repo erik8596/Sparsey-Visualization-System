@@ -10,60 +10,63 @@ class NeuronActivationParser:
     """Parser specifically for neuron-level activation data from WandB"""
 
     def __init__(self):
-        self.raw_pattern = re.compile(r"^num_activations/layer_(\d+)/mac_(\d+)/raw$")
+        # Updated pattern to only match non-zero layer indices
+        self.activation_pattern = re.compile(r"^num_activations/layer_([1-9]\d*)/mac_(\d+)$")
 
-    def parse_from_history(self, run) -> Dict[str, Dict[int, List[int]]]:
+    def parse_from_history(self, run) -> Dict[str, Dict[int, List[float]]]:
         """
-        Parse only neuron raw activations from run history data.
+        Parse neuron activations from run history data (excluding input layer).
+
         Returns:
-        {
-            'layer_1': {
-                0: [1,0,1,0],  # MAC 0's neuron activations
-                1: [0,1,0,1],  # MAC 1's neuron activations
-                ...
+            Dict mapping layer_name -> {mac_idx -> [activation_values]}
+            Example:
+            {
+                'layer_1': {
+                    0: [1.0, 1.0, 0.0],  # MAC 0's activation history
+                    1: [0.0, 1.0, 1.0],  # MAC 1's activation history
+                }
             }
-        }
         """
         try:
-            # Get raw activation data from history
-            raw_cols = self._get_raw_activation_columns(run)
-            if not raw_cols:
+            # Get history data
+            history = run.scan_history()
+            df = pd.DataFrame(history)
+
+            # Find all neuron activation columns (excluding layer 0)
+            neuron_cols = [
+                col for col in df.columns
+                if self.activation_pattern.match(col)
+            ]
+
+            if not neuron_cols:
+                logger.warning("No neuron activation columns found in history")
                 return {}
 
-            # Process into layer/MAC structure
-            result: Dict[str, Dict[int, List[int]]] = {}
-            for col, data in raw_cols.items():
-                if not isinstance(data, (list, np.ndarray)):
-                    continue
+            # Group by layer
+            result: Dict[str, Dict[int, List[float]]] = {}
 
-                if match := self.raw_pattern.match(col):
+            for col in neuron_cols:
+                if match := self.activation_pattern.match(col):
                     layer_idx, mac_idx = match.groups()
                     layer_name = f"layer_{layer_idx}"
                     mac_idx = int(mac_idx)
 
+                    # Initialize layer dict if needed
                     if layer_name not in result:
                         result[layer_name] = {}
 
-                    result[layer_name][mac_idx] = list(map(int, data))
+                    # Get activation values for this MAC
+                    activations = df[col].dropna().tolist()
+                    if activations:
+                        result[layer_name][mac_idx] = activations
 
+            print("\n=== Neuron Activations (Non-Input Layers) === {}".format(result))
             return result
 
         except Exception as e:
             logger.error(f"Error parsing neuron activations: {e}")
             return {}
 
-    def _get_raw_activation_columns(self, run) -> Dict[str, List[int]]:
-        """Helper to get raw activation data from run history"""
-        try:
-            history = run.scan_history()
-            df = pd.DataFrame(history)
-            raw_cols = [col for col in df.columns if '/raw' in col]
-            if not raw_cols:
-                return {}
-
-            # Get first non-null value for each column
-            return {col: df[col].dropna().iloc[0] for col in raw_cols}
-
-        except Exception as e:
-            logger.error(f"Error getting raw activation columns: {e}")
-            return {}
+    def _validate_activation_values(self, values: List[float]) -> bool:
+        """Helper to validate activation values are binary (0/1)"""
+        return all(v in (0, 1) for v in values)
