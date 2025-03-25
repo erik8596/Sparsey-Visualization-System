@@ -147,7 +147,11 @@ function setupUI() {
 eventBus.subscribe('newVisualizationData', (data) => {
   // data.layers, data.input_dimensions
   // MacManager can build the scene
-  uiManager.buildFromLayers(data.layers);
+  uiManager.buildFromLayers(
+    data.layers,
+    data.input_dimensions,     // e.g. { width: 28, height: 28 }
+    data.input_activations     // dictionary {1: 1, 2: 0, ...}
+  );
 
   // If we have valid input_dimensions, create the input grid
   const dims = data.input_dimensions;
