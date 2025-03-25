@@ -85,6 +85,35 @@ export class UIManager {
       };
     });
 
+    // [DEBUG LOG] Show all z-values in your data
+    console.log("[DEBUG] All layer z-values (unfiltered):", layers.map(el => el.z));
+    // [DEBUG LOG] Also show inputGridZ
+    console.log("[DEBUG] inputGridZ is:", this.inputGridZ);
+
+    /**
+     * [NEW or MODIFIED] Build a map from z-value -> layer index, EXCLUDING the input layer (z = -9999).
+     * This ensures each unique real layer z gets a stable 1-based index,
+     * and won't be offset by the input layer.
+     */
+    const relevantZValues = layers
+      .map(el => el.z)
+      .filter(z => z !== this.inputGridZ);  // exclude -9999
+    // [DEBUG LOG] Show the relevant z-values after filtering out -9999
+    console.log("[DEBUG] Excluding inputGridZ =>", relevantZValues);
+    // Sort them
+    const uniqueZValues = [...new Set(relevantZValues)].sort((a, b) => a - b);
+    // [DEBUG LOG] Show the sorted real layers
+    console.log("[DEBUG] Sorted real layers:", uniqueZValues);
+    // Now map each real z to an index (1-based)
+    const zToIndexMap = {};
+    uniqueZValues.forEach((zVal, idx) => {
+      zToIndexMap[zVal] = idx + 1;
+    });
+    // [DEBUG LOG] Show the final z -> layerIndex mapping
+    console.log("[DEBUG] zToIndexMap:", zToIndexMap);
+    // Store the mapping for later use in generating the sliders
+    this.zToIndexMap = zToIndexMap;
+
     // 3) First pass: build MAC composites
     layers.forEach(element => {
       if (element.type === 'mac') {
@@ -125,11 +154,18 @@ export class UIManager {
         macGroup.userData.outlineLine = outlineLine;
         macGroup.userData.fillMesh = fillMesh;
         macGroup.userData.originalZ = element.z;
+        macGroup.userData.type = 'mac';
 
+        // [NEW] Store the stable "layerIndex" for this MAC,
+        // defaulting to 0 if it's not in zToIndexMap (e.g., if it was the input layer).
+        const thisZ = element.z;
+        macGroup.userData.layerIndex = zToIndexMap[thisZ] || 0;
+
+        // Position the MAC in the scene (centered by subtracting layerCenters)
         macGroup.position.set(
-          element.x - layerCenters[element.z].x,
-          (element.y - layerCenters[element.z].y) * mac_spacing,
-          element.z
+          element.x - layerCenters[thisZ].x,
+          (element.y - layerCenters[thisZ].y) * mac_spacing,
+          thisZ
         );
 
         this.sceneManager.add(macGroup);
@@ -137,10 +173,10 @@ export class UIManager {
         macGroups.push(macGroup);
 
         // Put macGroup in layerGroups for uniform scaling
-        if (!this.layerGroups[element.z]) {
-          this.layerGroups[element.z] = [];
+        if (!this.layerGroups[thisZ]) {
+          this.layerGroups[thisZ] = [];
         }
-        this.layerGroups[element.z].push(macGroup);
+        this.layerGroups[thisZ].push(macGroup);
       }
     });
 
@@ -194,10 +230,14 @@ export class UIManager {
         object.userData = element;
         object.userData.type = element.type;
 
+        // [NEW - optional] Also store stable layerIndex for CMs/neurons
+        const thisZ = element.z;
+        object.userData.layerIndex = zToIndexMap[thisZ] || 0;
+
         object.position.set(
-          element.x - layerCenters[element.z].x,
-          (element.y - layerCenters[element.z].y) * mac_spacing,
-          element.z
+          element.x - layerCenters[thisZ].x,
+          (element.y - layerCenters[thisZ].y) * mac_spacing,
+          thisZ
         );
 
         // Attach to nearest MAC if that logic remains
@@ -223,10 +263,10 @@ export class UIManager {
         }
 
         // Store object in layerGroups for uniform scaling
-        if (!this.layerGroups[element.z]) {
-          this.layerGroups[element.z] = [];
+        if (!this.layerGroups[thisZ]) {
+          this.layerGroups[thisZ] = [];
         }
-        this.layerGroups[element.z].push(object);
+        this.layerGroups[thisZ].push(object);
       }
     });
 
@@ -240,8 +280,8 @@ export class UIManager {
       this.layerGroups[this.inputGridZ].push(this.inputGridGroup);
     }
 
-    // 6) Create a single uniform scale slider for each layer, including the input
-    this.generateUniformScaleSliders();  // [PRESERVED from your snippet, does the side panel sliders]
+    // 6) Create a single uniform scale slider for each layer, including the input.
+    this.generateUniformScaleSliders();
   }
 
   /**
@@ -318,65 +358,101 @@ export class UIManager {
   }
 
   /**
-   * For each layer in layerGroups, create a single uniform scale slider in the left panel.
-   */
-  generateUniformScaleSliders() {
-    // [PRESERVED] This was from your snippet, building the slider in "left-side-panel"
-    const leftPanel = document.getElementById('left-side-panel');
-    if (!leftPanel) return;
+ * For each layer in layerGroups, create a single uniform scale slider in the left panel.
+ * Modified to show "Input Layer", "Layer 1", "Layer 2", etc., and add a reset button
+ * to the right of each slider to reset the scaling for that layer.
+ */
+generateUniformScaleSliders() {
+  const leftPanel = document.getElementById('left-side-panel');
+  if (!leftPanel) return;
 
-    let scaleContainer = document.getElementById('uniform-layer-scales');
-    if (!scaleContainer) {
-      scaleContainer = document.createElement('div');
-      scaleContainer.id = 'uniform-layer-scales';
-      scaleContainer.style.margin = '10px 0';
-      scaleContainer.style.padding = '10px';
-      scaleContainer.style.borderTop = '1px solid #999';
-      leftPanel.appendChild(scaleContainer);
+  let scaleContainer = document.getElementById('uniform-layer-scales');
+  if (!scaleContainer) {
+    scaleContainer = document.createElement('div');
+    scaleContainer.id = 'uniform-layer-scales';
+    scaleContainer.style.margin = '10px 0';
+    scaleContainer.style.padding = '10px';
+    scaleContainer.style.borderTop = '1px solid #999';
+    leftPanel.appendChild(scaleContainer);
+  } else {
+    scaleContainer.innerHTML = '';
+  }
+
+  const title = document.createElement('h4');
+  title.textContent = 'Scale Each Layer (Including Input)';
+  scaleContainer.appendChild(title);
+
+  // Collect and sort all z-values from our layerGroups
+  const zValues = Object.keys(this.layerGroups)
+    .map(z => parseFloat(z))
+    .sort((a, b) => a - b);
+
+  zValues.forEach(zVal => {
+    let labelName;
+    
+    if (zVal === this.inputGridZ) {
+      labelName = 'Input Layer';
+    } else if (this.zToIndexMap && this.zToIndexMap[zVal] != null) {
+      const index = this.zToIndexMap[zVal];
+      labelName = `Layer ${index}`;
     } else {
-      scaleContainer.innerHTML = '';
+      labelName = `Layer Z=${zVal}`;
     }
 
-    const title = document.createElement('h4');
-    title.textContent = 'Scale Each Layer (Including Input)';
-    scaleContainer.appendChild(title);
+    // Create a wrapper for the slider, label, and reset button
+    const wrapper = document.createElement('div');
+    wrapper.style.marginBottom = '8px';
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
 
-    const zValues = Object.keys(this.layerGroups)
-      .map(z => parseFloat(z))
-      .sort((a, b) => a - b);
+    // Create and style the label
+    const label = document.createElement('label');
+    label.textContent = labelName;
+    label.style.marginRight = '8px';
 
-    zValues.forEach(zVal => {
-      const labelName = (zVal === this.inputGridZ) ? 'Input Layer' : `Layer Z=${zVal}`;
+    // Create the slider
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0.1';
+    slider.max = '3.0';
+    slider.step = '0.05';
+    slider.value = '1.0';
 
-      const wrapper = document.createElement('div');
-      wrapper.style.marginBottom = '8px';
-
-      const label = document.createElement('label');
-      label.textContent = labelName;
-      label.style.display = 'block';
-      label.style.marginBottom = '4px';
-
-      const slider = document.createElement('input');
-      slider.type = 'range';
-      slider.min = '0.1';
-      slider.max = '3.0';
-      slider.step = '0.05';
-      slider.value = '1.0';
-
-      slider.addEventListener('input', (evt) => {
-        const scaleVal = parseFloat(evt.target.value);
-        if (this.layerGroups[zVal]) {
-          this.layerGroups[zVal].forEach(obj => {
-            obj.scale.set(scaleVal, scaleVal, scaleVal);
-          });
-        }
-      });
-
-      wrapper.appendChild(label);
-      wrapper.appendChild(slider);
-      scaleContainer.appendChild(wrapper);
+    // When slider is moved, update scale for all objects in that layer
+    slider.addEventListener('input', (evt) => {
+      const scaleVal = parseFloat(evt.target.value);
+      if (this.layerGroups[zVal]) {
+        this.layerGroups[zVal].forEach(obj => {
+          obj.scale.set(scaleVal, scaleVal, scaleVal);
+        });
+      }
     });
-  }
+
+    // Create the reset button
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'Reset';
+    resetBtn.style.marginLeft = '8px';
+    resetBtn.style.padding = '2px 6px';
+    resetBtn.style.fontSize = '0.8em';
+    resetBtn.addEventListener('click', (evt) => {
+      // Reset slider to 1.0 and update all objects' scale to 1
+      slider.value = '1.0';
+      if (this.layerGroups[zVal]) {
+        this.layerGroups[zVal].forEach(obj => {
+          obj.scale.set(1, 1, 1);
+        });
+      }
+    });
+
+    // Append the label, slider, and reset button to the wrapper
+    wrapper.appendChild(label);
+    wrapper.appendChild(slider);
+    wrapper.appendChild(resetBtn);
+
+    // Append the wrapper to the scale container
+    scaleContainer.appendChild(wrapper);
+  });
+}
 
   onSceneClick(event) {
     const rect = this.sceneManager.renderer.domElement.getBoundingClientRect();
@@ -406,40 +482,57 @@ export class UIManager {
 
   toggleMACSelection(macGroup) {
     const outlineLine = macGroup.userData.outlineLine;
+
+    // Optional helper: disable raycasting on newly added lines
+    function disableRaycast(object) {
+      object.raycast = () => {};
+      object.children && object.children.forEach(child => disableRaycast(child));
+    }
+
     if (macGroup.userData.isSelected) {
-      macGroup.remove(macGroup.userData.innerOutline); // Remove inner green border
+      // Deselecting
+      if (macGroup.userData.innerOutline) {
+        macGroup.remove(macGroup.userData.innerOutline); // remove green border
+        macGroup.userData.innerOutline = null;
+      }
       macGroup.userData.isSelected = false;
+
+      // Hide side-panel info for this MAC
+      if (macGroup.userData.canvasWrapper) {
+        macGroup.userData.canvasWrapper.style.display = 'none';
+      }
+
+      // Remove from the array of selected MACs
       const idx = this.selectedMACs.indexOf(macGroup);
       if (idx !== -1) {
         this.selectedMACs.splice(idx, 1);
       }
-      if (macGroup.userData.canvasWrapper) {
-        macGroup.userData.canvasWrapper.style.display = 'none';
-      }
     } else {
+      // Selecting
       if (!macGroup.userData.canvasWrapper) {
         macGroup.userData.canvasWrapper = this.createMACCanvas(macGroup);
       } else {
         macGroup.userData.canvasWrapper.style.display = 'block';
       }
-      
+
       // Create an inner green border
       const innerOutlineGeometry = outlineLine.geometry.clone();
-      const innerOutlineMaterial = new THREE.LineBasicMaterial({ color: 0x08FF08, linewidth: 4 });
+      const innerOutlineMaterial = new THREE.LineBasicMaterial({ color: 0x08FF08, linewidth: 1 });
       const innerOutline = new THREE.LineLoop(innerOutlineGeometry, innerOutlineMaterial);
-      innerOutline.position.z = 0.01; // Slightly above main outline to be visible
+      innerOutline.position.z = 0.01; // slightly above main outline
+      disableRaycast(innerOutline);
       macGroup.add(innerOutline);
+
       macGroup.userData.innerOutline = innerOutline;
-      
       macGroup.userData.isSelected = true;
       this.selectedMACs.push(macGroup);
     }
 
-    const macData = macGroup.userData;
-    const layer = (macData.z / 10) + 1;
+    // [MODIFIED] Use the stable layerIndex for display in the side panel.
+    const layerIndex = macGroup.userData.layerIndex;
     const detailsDiv = document.getElementById('mac-details');
     if (detailsDiv) {
-      detailsDiv.innerHTML = `<p><strong>Layer:</strong> ${layer.toFixed(1)}</p>`;
+      detailsDiv.innerHTML = `<p><strong>Layer:</strong> ${layerIndex}</p>`;
     }
   }
 
@@ -449,6 +542,10 @@ export class UIManager {
         macGroup.userData.outlineLine.material.color.set(0x000000);
         macGroup.position.z = macGroup.userData.originalZ;
         macGroup.userData.isSelected = false;
+        if (macGroup.userData.innerOutline) {
+          macGroup.remove(macGroup.userData.innerOutline);
+          macGroup.userData.innerOutline = null;
+        }
       }
     });
     this.selectedMACs = [];
@@ -469,7 +566,8 @@ export class UIManager {
     containerDiv.style.textAlign = 'center';
 
     const label = document.createElement('p');
-    label.textContent = `MAC Layer ${(macGroup.userData.z / 10) + 1}`;
+    // Display using the stable layerIndex
+    label.textContent = `MAC Layer ${macGroup.userData.layerIndex}`;
     label.style.margin = '0 0 5px 0';
     containerDiv.appendChild(label);
 

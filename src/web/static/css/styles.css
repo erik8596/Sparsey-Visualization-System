@@ -137,7 +137,7 @@ main {
   left: 0;
   top: 150px; /* Adjusted to start below camera control buttons */
   height: calc(100vh - 150px); /* Ensures it fills the remaining height */
-  width: 250px;
+  width: 300px;
   background-color: #333;
   color: white;
   transition: transform 0.3s ease-in-out;
