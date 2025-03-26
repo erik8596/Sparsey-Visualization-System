@@ -357,68 +357,87 @@ export class UIManager {
     }
   }
 
-  /**
- * For each layer in layerGroups, create a single uniform scale slider in the left panel.
- * Modified to show "Input Layer", "Layer 1", "Layer 2", etc., and add a reset button
- * to the right of each slider to reset the scaling for that layer.
+ /**
+ * Creates a styled box (using CSS) that contains the "Individual Layer Controls"
+ * title and, for each layer, a subheading and a row with a "Scaling:" label, a slider, 
+ * and a reset button. Dividers are inserted between layer groups.
  */
 generateUniformScaleSliders() {
   const leftPanel = document.getElementById('left-side-panel');
   if (!leftPanel) return;
 
+  // Create or reuse the scaling controls container.
   let scaleContainer = document.getElementById('uniform-layer-scales');
   if (!scaleContainer) {
     scaleContainer = document.createElement('div');
     scaleContainer.id = 'uniform-layer-scales';
-    scaleContainer.style.margin = '10px 0';
-    scaleContainer.style.padding = '10px';
-    scaleContainer.style.borderTop = '1px solid #999';
     leftPanel.appendChild(scaleContainer);
   } else {
     scaleContainer.innerHTML = '';
   }
 
+  // Add the title inside the box.
   const title = document.createElement('h4');
-  title.textContent = 'Scale Each Layer (Including Input)';
+  title.textContent = 'Individual Layer Controls';
+  title.style.marginTop = '0';
+  title.style.marginBottom = '5px';
+  title.style.textAlign = 'center';
+  title.style.fontStyle = 'italic';
   scaleContainer.appendChild(title);
 
-  // Collect and sort all z-values from our layerGroups
+  // Collect, sort, and then reverse the z-values from our layerGroups
   const zValues = Object.keys(this.layerGroups)
     .map(z => parseFloat(z))
-    .sort((a, b) => a - b);
+    .sort((a, b) => a - b)
+    .reverse();
 
-  zValues.forEach(zVal => {
+  // For each z-value, create a slider group.
+  zValues.forEach((zVal, index) => {
     let labelName;
-    
     if (zVal === this.inputGridZ) {
       labelName = 'Input Layer';
     } else if (this.zToIndexMap && this.zToIndexMap[zVal] != null) {
-      const index = this.zToIndexMap[zVal];
-      labelName = `Layer ${index}`;
+      const layerIndex = this.zToIndexMap[zVal];
+      labelName = `Layer ${layerIndex}`;
     } else {
       labelName = `Layer Z=${zVal}`;
     }
 
-    // Create a wrapper for the slider, label, and reset button
-    const wrapper = document.createElement('div');
-    wrapper.style.marginBottom = '8px';
-    wrapper.style.display = 'flex';
-    wrapper.style.alignItems = 'center';
+    // Create a container for this layer's controls.
+    const layerContainer = document.createElement('div');
+    layerContainer.className = 'layer-container';
 
-    // Create and style the label
-    const label = document.createElement('label');
-    label.textContent = labelName;
-    label.style.marginRight = '8px';
+    // Create a subheading for the layer.
+    const subheading = document.createElement('h5');
+    subheading.textContent = labelName;
+    subheading.className = 'layer-subheading';
+    subheading.style.margin = '0';
+    subheading.style.marginBottom = '5px';
+    subheading.style.textAlign = 'center';
+    layerContainer.appendChild(subheading);
 
-    // Create the slider
+    // Create a row for the scaling controls.
+    const sliderRow = document.createElement('div');
+    sliderRow.className = 'slider-row';
+    sliderRow.style.display = 'flex';
+    sliderRow.style.alignItems = 'center';
+
+    // Create a label for the slider.
+    const scalingLabel = document.createElement('label');
+    scalingLabel.textContent = 'Scaling:';
+    scalingLabel.className = 'scaling-label';
+    scalingLabel.style.marginRight = '8px';
+    sliderRow.appendChild(scalingLabel);
+
+    // Create the slider.
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = '0.1';
     slider.max = '3.0';
     slider.step = '0.05';
     slider.value = '1.0';
-
-    // When slider is moved, update scale for all objects in that layer
+    slider.className = 'layer-slider';
+    slider.style.setProperty('width', '150px', 'important');
     slider.addEventListener('input', (evt) => {
       const scaleVal = parseFloat(evt.target.value);
       if (this.layerGroups[zVal]) {
@@ -427,15 +446,16 @@ generateUniformScaleSliders() {
         });
       }
     });
+    sliderRow.appendChild(slider);
 
-    // Create the reset button
+    // Create the reset button.
     const resetBtn = document.createElement('button');
     resetBtn.textContent = 'Reset';
+    resetBtn.className = 'slider-reset-btn';
     resetBtn.style.marginLeft = '8px';
     resetBtn.style.padding = '2px 6px';
     resetBtn.style.fontSize = '0.8em';
     resetBtn.addEventListener('click', (evt) => {
-      // Reset slider to 1.0 and update all objects' scale to 1
       slider.value = '1.0';
       if (this.layerGroups[zVal]) {
         this.layerGroups[zVal].forEach(obj => {
@@ -443,14 +463,113 @@ generateUniformScaleSliders() {
         });
       }
     });
+    sliderRow.appendChild(resetBtn);
 
-    // Append the label, slider, and reset button to the wrapper
-    wrapper.appendChild(label);
-    wrapper.appendChild(slider);
-    wrapper.appendChild(resetBtn);
+    // Append the slider row to the layer container.
+    layerContainer.appendChild(sliderRow);
 
-    // Append the wrapper to the scale container
-    scaleContainer.appendChild(wrapper);
+    // Create a toggle row for showing/hiding MACs, CMs, and Neurons
+    const toggleRow = document.createElement('div');
+    toggleRow.className = 'toggle-row';
+    toggleRow.style.display = 'flex';
+    toggleRow.style.justifyContent = 'space-around';
+    toggleRow.style.marginTop = '5px';
+
+    // MACs toggle checkbox
+    const macCheckbox = document.createElement('input');
+    macCheckbox.type = 'checkbox';
+    macCheckbox.id = `toggle-mac-${zVal}`;
+    macCheckbox.checked = true;
+    toggleRow.appendChild(macCheckbox);
+    const macLabel = document.createElement('label');
+    macLabel.htmlFor = `toggle-mac-${zVal}`;
+    macLabel.textContent = 'MACs';
+    toggleRow.appendChild(macLabel);
+
+    // CMs toggle checkbox
+    const cmCheckbox = document.createElement('input');
+    cmCheckbox.type = 'checkbox';
+    cmCheckbox.id = `toggle-cm-${zVal}`;
+    cmCheckbox.checked = true;
+    toggleRow.appendChild(cmCheckbox);
+    const cmLabel = document.createElement('label');
+    cmLabel.htmlFor = `toggle-cm-${zVal}`;
+    cmLabel.textContent = 'CMs';
+    toggleRow.appendChild(cmLabel);
+
+    // Neurons toggle checkbox
+    const neuronCheckbox = document.createElement('input');
+    neuronCheckbox.type = 'checkbox';
+    neuronCheckbox.id = `toggle-neuron-${zVal}`;
+    neuronCheckbox.checked = true;
+    toggleRow.appendChild(neuronCheckbox);
+    const neuronLabel = document.createElement('label');
+    neuronLabel.htmlFor = `toggle-neuron-${zVal}`;
+    neuronLabel.textContent = 'Neurons';
+    toggleRow.appendChild(neuronLabel);
+
+    // Append the toggle row to the layer's container
+    layerContainer.appendChild(toggleRow);
+
+    // Event listener for MACs toggle
+    macCheckbox.addEventListener('change', () => {
+      const show = macCheckbox.checked;
+      if (this.layerGroups[zVal]) {
+        this.layerGroups[zVal].forEach(obj => {
+          if (obj.userData && obj.userData.type === 'mac') {
+            obj.visible = show;
+            if (show) {
+              // Add back to clickableMACs if not already present
+              if (!this.clickableMACs.includes(obj)) {
+                this.clickableMACs.push(obj);
+              }
+            } else {
+              // Remove from clickableMACs so they become untoggleable while hidden
+              const idx = this.clickableMACs.indexOf(obj);
+              if (idx > -1) {
+                this.clickableMACs.splice(idx, 1);
+              }
+            }
+          }
+        });
+      }
+    });
+
+    // Event listener for CMs toggle
+    cmCheckbox.addEventListener('change', () => {
+      const show = cmCheckbox.checked;
+      if (this.layerGroups[zVal]) {
+        this.layerGroups[zVal].forEach(obj => {
+          if (obj.userData && obj.userData.type === 'cm') {
+            obj.visible = show;
+          }
+        });
+      }
+    });
+
+    // Event listener for Neurons toggle
+    neuronCheckbox.addEventListener('change', () => {
+      const show = neuronCheckbox.checked;
+      if (this.layerGroups[zVal]) {
+        this.layerGroups[zVal].forEach(obj => {
+          if (obj.userData && obj.userData.type === 'neuron') {
+            obj.visible = show;
+          }
+        });
+      }
+    });
+
+    // --- End toggle controls block ---
+
+    // Append the layer container to the scaling controls container.
+    scaleContainer.appendChild(layerContainer);
+
+    // If this is not the last layer, insert a divider.
+    if (index < zValues.length - 1) {
+      const divider = document.createElement('hr');
+      divider.className = 'slider-divider';
+      scaleContainer.appendChild(divider);
+    }
   });
 }
 
