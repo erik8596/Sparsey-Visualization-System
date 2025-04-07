@@ -13,7 +13,7 @@ class ModelConfig:
     layers: Dict[str, Any] = field(default_factory=dict)
     input_dimensions: Dict[str, int] = field(default_factory=dict)
     mac_activations: Dict[str, Dict[int, int]] = field(default_factory=dict)
-    neuron_activations: Dict[str, Dict[int, List[int]]] = field(default_factory=dict)
+    neuron_activations: Dict[str, Dict[int, Dict[int, Dict[int, List[float]]]]] = field(default_factory=dict)
     input_activations: Dict[int, int] = field(default_factory=dict)
 
     def _extract_model_config(self, run: Any) -> Dict[str, Any]:

@@ -18,12 +18,14 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
     neuron_factory: NeuronFactory = field(default_factory=NeuronFactory)
 
     def process(self, model_config: Dict[str, Any], mac_activations: Dict[str, Dict[int, int]],
-                input_activations: Dict[int, int] = None, neuron_activations: Dict[str, Dict[int, List[int]]] = None) -> Dict[str, Any]:
+                input_activations: Dict[int, int] = None,
+                neuron_activations: Dict[str, Dict[int, Dict[int, Dict[int, List[float]]]]] = None) -> Dict[str, Any]:
         visualization_data = []
 
         # Process regular layers
         for idx, (layer_name, layer_dict) in enumerate(model_config.items(), 1):
             layer_neuron_activations = neuron_activations.get(layer_name, {}) if neuron_activations else {}
+
             visualization_data.extend(
                 self._process_layer(idx, layer_name, layer_dict, mac_activations, layer_neuron_activations)
             )
@@ -36,7 +38,7 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
 
     def _process_layer(self, idx: int, layer_name: str, layer_dict: Dict[str, Any],
                       mac_activations: Dict[str, Dict[int, int]],
-                      neuron_activations: Dict[int, List[int]]) -> List[Dict[str, Any]]:
+                      neuron_activations: Dict[int, Dict[int, Dict[int, List[float]]]]) -> List[Dict[str, Any]]:
         params = layer_dict.get("params", {})
         z = idx * 10
         layer_data = []
@@ -44,11 +46,14 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
         mac_positions = self._get_mac_positions(params)
         layer_activation_dict = mac_activations.get(layer_name, {})
 
-        for i, (x, y) in enumerate(mac_positions, start=1):
+        for mac_idx, (x, y) in enumerate(mac_positions, start=1):
+            # Get MAC-specific neuron activations
+            mac_neuron_activations = neuron_activations.get(mac_idx, {})
+
             mac = self._create_mac_with_components(
-                x, y, z, i, params,
+                x, y, z, mac_idx, params,
                 layer_activation_dict,
-                neuron_activations.get(i, [])
+                mac_neuron_activations
             )
             layer_data.extend(mac.get_visualization_data())
 
@@ -68,60 +73,66 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
         )
 
     def _create_mac_with_components(self, x: float, y: float, z: float,
-                                    mac_idx: int, params: Dict[str, Any],
-                                    activations: Dict[int, int],
-                                    mac_neuron_activations: List[int]) -> 'MAC':
+                                  mac_idx: int, params: Dict[str, Any],
+                                  activations: Dict[int, int],
+                                  mac_neuron_activations: Dict[int, Dict[int, List[float]]]) -> 'MAC':
         # Create MAC with its activation state
         is_active = activations.get(mac_idx, 0) == 1
         mac = self.mac_factory.create_component(x, y, z, active=is_active)
 
-        # Get CM positions and distribute neurons
+        # Get CM positions
         cm_positions = self._get_cm_positions(x, y, params)
         neurons_per_cm = params.get("num_neurons_per_cm", 1)
-        total_neurons = neurons_per_cm * params.get("num_cms_per_mac", 1)
 
-        # Get activation states for neurons
-        neuron_states = mac_neuron_activations if mac_neuron_activations else []
-        if len(neuron_states) > 0:
-            # Get latest state if we have history
-            neuron_states = [int(state) for state in neuron_states]  # Ensure integers
-        else:
-            neuron_states = [0] * total_neurons  # Default to inactive
-
-        # Distribute states across CMs
+        # Create CMs with their neurons
         for cm_idx, cm_pos in enumerate(cm_positions.reshape(-1, 2)):
-            start_idx = cm_idx * neurons_per_cm
-            end_idx = start_idx + neurons_per_cm
-            cm_neuron_states = neuron_states[start_idx:end_idx] if start_idx < len(neuron_states) else [0] * neurons_per_cm
+            cm_neuron_activations = mac_neuron_activations.get(cm_idx, {})
 
             cm = self._create_cm_with_neurons(
                 cm_pos[0], cm_pos[1], z, params,
-                neuron_states=cm_neuron_states
+                neurons_per_cm,
+                cm_neuron_activations
             )
             mac.add_subcomponent(cm)
 
         return mac
 
     def _create_cm_with_neurons(self, x: float, y: float, z: float,
-                                params: Dict[str, Any],
-                                neuron_states: List[int] = None) -> 'CM':
+                              params: Dict[str, Any],
+                              neurons_per_cm: int,
+                              neuron_activations: Dict[int, List[float]] = None) -> 'CM':
         cm = self.cm_factory.create_component(x, y, z)
 
         neuron_positions = self.neuron_factory.calculate_positions(
             np.array([[x, y]]),
-            params.get("num_neurons_per_cm", 1)
+            neurons_per_cm
         )
 
         # Create neurons with their states
-        neuron_states = neuron_states if neuron_states else []
-        for i, neuron_pos in enumerate(neuron_positions.reshape(-1, 2)):
-            # Convert to bool and ensure we have a state
-            is_active = bool(int(neuron_states[i])) if i < len(neuron_states) else False
+        neuron_activations = neuron_activations or {}
+        for neuron_idx in range(neurons_per_cm):
+            neuron_pos = neuron_positions.reshape(-1, 2)[neuron_idx % len(neuron_positions.reshape(-1, 2))]
+
+            # Get neuron activation history
+            neuron_history = neuron_activations.get(neuron_idx, [])
+
+            # Default values
+            is_active = False
+            raw_activation = 0.0
+            avg_activation = 0.0
+
+            if neuron_history:
+                # Get latest state (most recent value in the history)
+                is_active = neuron_history[-1] == 1.0  # Explicitly check for 1.0
+                raw_activation = float(neuron_history[-1])
+                # Calculate average activation
+                avg_activation = float(sum(neuron_history) / len(neuron_history))
 
             neuron = self.neuron_factory.create_component(
                 neuron_pos[0], neuron_pos[1], z,
                 active=is_active,
-                raw_activation=float(is_active)
+                raw_activation=raw_activation,
+                avg_activation=avg_activation
             )
             cm.add_subcomponent(neuron)
 
