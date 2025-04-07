@@ -13,7 +13,6 @@ header {
   background-color: #f2f2f2;
   border-bottom: 1px solid #ddd;
 }
-
 header h1 {
   margin: 0 0 10px;
 }
@@ -30,22 +29,15 @@ header h1 {
 main {
   display: flex;
   height: calc(100% - 80px);
-  /* Adjust based on header height */
 }
 
-/* Hide scrollbar while maintaining functionality */
+/* Hide scrollbar */
 ::-webkit-scrollbar {
   width: 0;
   background: transparent;
 }
-
-/* For Firefox */
 * {
   scrollbar-width: none;
-}
-
-/* For IE/Edge */
-* {
   -ms-overflow-style: none;
 }
 
@@ -57,121 +49,221 @@ main {
   background-color: #f0f0f0;
 }
 
-/* Side panel styles */
+/* Side panel for dynamic canvases (if used) */
 #side-panel {
   width: 300px;
-  /* Initial width */
   padding: 20px;
   box-sizing: border-box;
-  background-color: #ffffff;
+  background-color: #fff;
   border-left: 1px solid #ccc;
   overflow-y: auto;
   z-index: 100;
 }
-
 #side-panel h2 {
   margin-top: 0;
 }
 
+/* MAC Details styles */
 #mac-details {
   margin-bottom: 10px;
   line-height: 1.5;
   color: #333;
 }
-
-/* Top view canvas styles */
-#topview-canvas {
-  width: 200px;
-  height: 200px;
-  display: block;
-  margin: 0 auto;
-  border: 1px solid #ccc;
-}
-
-/* Dividing lines between dynamic canvas containers */
-.mac-canvas-wrapper {
-  border-bottom: 3px solid #ccc;
-  padding-bottom: 10px;
-  margin-bottom: 10px;
-}
-
-/* MAC Details Container Styles */
 #mac-details-container {
   position: absolute;
   top: 40px;
   right: 15px;
   text-align: center;
 }
-
-/* Flex container for header and reset button */
 #mac-details-row {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
 }
-
-/* MAC Details Header Styles */
 #mac-details-header {
   font-size: 1.3em;
   font-weight: bold;
   margin: 0;
 }
-
-/* Reset Button Styles */
 #resetButton {
   padding: 3px 7px;
   font-size: 0.8em;
 }
-
-/* MAC Details Message Styles */
 #mac-details-msg {
   font-style: italic;
   font-size: 0.8em;
   margin-top: 3px;
 }
 
-/* #bottom-panel {
+/* Left Side Panel */
+#left-side-panel {
   position: fixed;
-  bottom: 0;
   left: 0;
-  width: 100%;
-  height: 100px;
-  background-color: #eaeaea;
+  top: 150px; /* Stops below header */
+  height: calc(100vh - 150px);
+  width: 300px;
+  background-color: #333;
+  color: white;
+  transition: transform 0.3s ease-in-out;
+  transform: translateX(-100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 10px;
-  box-sizing: border-box;
-  border-top: 1px solid #ccc;
-  z-index: 100;
-} */
-
-/* Overlay for camera controls on the left */
-#camera-control-pane {
-  position: absolute;
-  top: 10px;
-  left: 10px;
   z-index: 1000;
-  /* background-color: rgba(255, 255, 255, 0.9); */
+}
+#left-side-panel.collapsed {
+  transform: translateX(-100%);
+}
+#left-side-panel.open {
+  transform: translateX(0);
+}
+
+/* Shared box style for side panel boxes */
+.side-panel-box {
   padding: 10px;
   border-radius: 5px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  background-color: #ccc;  /* Light gray */
+  border: 2px solid #888;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
 }
 
-/* #camera-control-pane button {
-  display: block;
-  margin: 5px 0;
-  padding: 8px 12px;
-  background-color: #007bff;
+/* Camera control pane styling (uses shared class) */
+#camera-control-pane {
+  margin-top: 20px;
+}
+.camera-controls-header {
+  font-style: italic;
+  margin: 0 0 10px 0;
+  color: #000;
+}
+
+/* Styles for the scaling controls box – will match camera control pane */
+#uniform-layer-scales {
+  margin-top: 20px; /* Will be appended dynamically to the left-side panel */
+  padding: 10px;
+  background-color: #ccc;
+  border: 2px solid #888;
+  border-radius: 5px;
+  color: #000;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+/* New styles for individual layer controls */
+
+/* Container for each layer's controls */
+.layer-container {
+  margin-bottom: 8px;
+}
+
+/* Subheading for each layer */
+.layer-subheading {
+  margin: 0;
+  margin-bottom: 5px;
+  text-align: center;
+  font-size: 0.9em;
+  font-weight: bold;
+}
+
+/* Row for slider controls */
+.slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Label for scaling slider row */
+.scaling-label {
+  margin-right: 8px;
+  font-size: 0.8em;
+}
+
+/* Slider styling */
+.layer-slider {
+  width: 150px;
+}
+
+/* Reset button styling */
+.slider-reset-btn {
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 0.8em;
+}
+
+/* Divider styling between layer groups */
+.slider-divider {
+  width: 100%;
+  border: none;
+  height: 1px;
+  background-color: #fff;
+}
+
+/* Additional spacing rules: 
+   - Padding below the "Individual Layer Controls" header
+   - Padding below the last layer's subheading 
+*/
+#uniform-layer-scales h4 {
+  padding-bottom: 5px;
+}
+.layer-container:last-child .layer-subheading {
+  padding-bottom: 5px;
+}
+
+/* Existing slider group styles (if used) */
+.slider-group {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+}
+.slider-label {
+  margin-right: 8px;
+  font-size: 0.8em;
+}
+.layer-slider {
+  width: 150px;
+}
+.slider-reset-btn {
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 0.8em;
+}
+.slider-divider {
+  width: 100%;
+  border: none;
+  height: 1px;
+  background-color: #fff;
+}
+
+/* Panel toggle button */
+#toggle-panel-btn {
+  position: absolute;
+  right: -40px;
+  bottom: 30px;
+  background-color: #333;
   color: white;
   border: none;
-  border-radius: 4px;
+  padding: 10px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  font-size: 18px;
+  z-index: 1001;
+}
+#toggle-panel-btn:hover {
+  background-color: #555;
 }
 
-#camera-control-pane button:hover {
-  background-color: #0056b3;
+/* Main canvas container */
+#canvas-container {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  background-color: black;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
-
-#camera-control-pane button:active {
-  background-color: #004085;
-} */
