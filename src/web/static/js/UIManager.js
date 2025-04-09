@@ -46,21 +46,20 @@ export class UIManager {
    * @param {Object} inputActivations - optional dictionary for input cell states
    */
   buildFromLayers(layers, inputDims = null, inputActivations = null) {
-    // 1) Clear old scene objects
+    // 1) Clear old scene objects.
     while (this.scene.children.length > 0) {
       this.scene.remove(this.scene.children[0]);
     }
     this.clickableMACs = [];
     this.selectedMACs = [];
-
-    // Clear old dictionary
-    this.layerGroups = {};
+  
+    // Clear old layerGroups and inputGridGroup.
+    this.layerGroups = {}; // Now will hold THREE.Group objects for each layer.
     this.inputGridGroup = null;
-
-    const macGroups = [];
+  
     const mac_spacing = 1.33;
-
-    // 2) Compute layer-wise centroids to center align each layer
+  
+    // 2) Compute layer-wise centroids to center align each layer.
     const layerGroupsObj = {};
     layers.forEach(element => {
       const layer = element.z;
@@ -69,8 +68,8 @@ export class UIManager {
       }
       layerGroupsObj[layer].push(element);
     });
-
-    // Calculate center offsets for each layer
+  
+    // Calculate center offsets for each layer.
     const layerCenters = {};
     Object.keys(layerGroupsObj).forEach(layer => {
       const elements = layerGroupsObj[layer];
@@ -84,48 +83,32 @@ export class UIManager {
         y: sumY / elements.length
       };
     });
-
-    // [DEBUG LOG] Show all z-values in your data
+  
     console.log("[DEBUG] All layer z-values (unfiltered):", layers.map(el => el.z));
-    // [DEBUG LOG] Also show inputGridZ
     console.log("[DEBUG] inputGridZ is:", this.inputGridZ);
-
-    /**
-     * [NEW or MODIFIED] Build a map from z-value -> layer index, EXCLUDING the input layer (z = -9999).
-     * This ensures each unique real layer z gets a stable 1-based index,
-     * and won't be offset by the input layer.
-     */
-    const relevantZValues = layers
-      .map(el => el.z)
-      .filter(z => z !== this.inputGridZ);  // exclude -9999
-    // [DEBUG LOG] Show the relevant z-values after filtering out -9999
-    console.log("[DEBUG] Excluding inputGridZ =>", relevantZValues);
-    // Sort them
+  
+    // Build z -> layerIndex map (excluding input layer)
+    const relevantZValues = layers.map(el => el.z).filter(z => z !== this.inputGridZ);
     const uniqueZValues = [...new Set(relevantZValues)].sort((a, b) => a - b);
-    // [DEBUG LOG] Show the sorted real layers
-    console.log("[DEBUG] Sorted real layers:", uniqueZValues);
-    // Now map each real z to an index (1-based)
     const zToIndexMap = {};
     uniqueZValues.forEach((zVal, idx) => {
       zToIndexMap[zVal] = idx + 1;
     });
-    // [DEBUG LOG] Show the final z -> layerIndex mapping
     console.log("[DEBUG] zToIndexMap:", zToIndexMap);
-    // Store the mapping for later use in generating the sliders
     this.zToIndexMap = zToIndexMap;
-
-    // 3) First pass: build MAC composites
+  
+    // 3) First pass: build MAC composites.
     layers.forEach(element => {
       if (element.type === 'mac') {
         const macGroup = new THREE.Group();
+        // (Keep your drawing code for MAC visuals)
+        // Draw hexagon visual.
         const shape = new THREE.Shape();
         this.drawHexagon(shape, 2.0);
-
         const fillGeometry = new THREE.ShapeGeometry(shape);
         const isActive = (element.active === true || element.active === 1);
         const fillColor = isActive ? new THREE.Color(1.0, 0, 0) : new THREE.Color(0xcccccc);
         const fillOpacity = isActive ? 0.8 : 0.2;
-
         const fillMaterial = new THREE.MeshBasicMaterial({
           color: fillColor,
           transparent: true,
@@ -133,59 +116,59 @@ export class UIManager {
           side: THREE.DoubleSide
         });
         const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
+        // Mark the fill as a MAC visual.
+        fillMesh.userData.isMacVisual = true;
         fillMesh.position.z = -0.01;
         macGroup.add(fillMesh);
 
-        if (element.raw_activation !== undefined) {
-          macGroup.userData.raw_activation = element.raw_activation;
-        }
-        if (element.avg_activation !== undefined) {
-          macGroup.userData.avg_activation = element.avg_activation;
-        }
-
+        // Create the outline.
         const points = shape.getPoints();
         const outlineGeometry = new THREE.BufferGeometry().setFromPoints(points);
         const outlineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
         const outlineLine = new THREE.LineLoop(outlineGeometry, outlineMaterial);
-        outlineLine.userData = { type: 'mac_outline' };
+        // Tag the outline as a MAC visual and as a mac_outline so it can be reset later.
+        outlineLine.userData = { type: 'mac_outline', isMacVisual: true };
         macGroup.add(outlineLine);
 
-        macGroup.userData = element;
+        // Set userData for toggling.
+        macGroup.userData = Object.assign({}, element);
         macGroup.userData.outlineLine = outlineLine;
         macGroup.userData.fillMesh = fillMesh;
         macGroup.userData.originalZ = element.z;
         macGroup.userData.type = 'mac';
-
-        // [NEW] Store the stable "layerIndex" for this MAC,
-        // defaulting to 0 if it's not in zToIndexMap (e.g., if it was the input layer).
+        macGroup.userData.layerIndex = zToIndexMap[element.z] || 0;
+        
+        // (Optional) If you want to tag the MAC for raycasting, you can also add:
+        macGroup.userData.isMACGroup = true;
+        
+        // Position the MAC relative to the layer's centroid.
         const thisZ = element.z;
-        macGroup.userData.layerIndex = zToIndexMap[thisZ] || 0;
-
-        // Position the MAC in the scene (centered by subtracting layerCenters)
         macGroup.position.set(
           element.x - layerCenters[thisZ].x,
           (element.y - layerCenters[thisZ].y) * mac_spacing,
-          thisZ
+          0  // Local Z becomes 0 because the layer group holds the Z offset.
         );
-
-        this.sceneManager.add(macGroup);
-        this.clickableMACs.push(macGroup);
-        macGroups.push(macGroup);
-
-        // Put macGroup in layerGroups for uniform scaling
+  
+        // Create or reuse a layer group for this z.
         if (!this.layerGroups[thisZ]) {
-          this.layerGroups[thisZ] = [];
+          const layerGroup = new THREE.Group();
+          // Set the layer group's position so that its Z is the layer's z.
+          layerGroup.position.set(0, 0, thisZ);
+          this.layerGroups[thisZ] = layerGroup;
+          this.sceneManager.add(layerGroup);
         }
-        this.layerGroups[thisZ].push(macGroup);
+        // Add the MAC group to the layer group.
+        this.layerGroups[thisZ].add(macGroup);
+        // Mark macGroup as clickable.
+        this.clickableMACs.push(macGroup);
       }
     });
-
-    // 4) Second pass: build CM/neuron objects
+  
+    // 4) Second pass: build CM/neuron objects.
     layers.forEach(element => {
       if (element.type === 'cm' || element.type === 'neuron') {
         let object;
         if (element.type === 'cm') {
-          // [PRESERVED from your old code, but changed the shape to 'drawCircle' if you want a circle]
           const shape = new THREE.Shape();
           this.drawCircle(shape, 0.4); 
           const points = shape.getPoints();
@@ -195,7 +178,6 @@ export class UIManager {
         } else if (element.type === 'neuron') {
           const shape = new THREE.Shape();
           this.drawCircle(shape, 0.10);
-
           if (element.active) {
             const fillGeometry = new THREE.ShapeGeometry(shape);
             const intensity = element.raw_activation || 0;
@@ -218,7 +200,6 @@ export class UIManager {
             });
             object = new THREE.LineLoop(geometry, material);
           }
-
           if (element.raw_activation !== undefined) {
             object.userData.raw_activation = element.raw_activation;
           }
@@ -226,85 +207,82 @@ export class UIManager {
             object.userData.avg_activation = element.avg_activation;
           }
         }
-
-        object.userData = element;
+        object.userData = Object.assign({}, element);
         object.userData.type = element.type;
-
-        // [NEW - optional] Also store stable layerIndex for CMs/neurons
         const thisZ = element.z;
         object.userData.layerIndex = zToIndexMap[thisZ] || 0;
-
+  
         object.position.set(
           element.x - layerCenters[thisZ].x,
           (element.y - layerCenters[thisZ].y) * mac_spacing,
-          thisZ
+          0  // Place it in local coordinates; if attached to a MAC, its parent will position it.
         );
-
-        // Attach to nearest MAC if that logic remains
+  
+        // Attach to nearest MAC if possible.
         let closestMac = null;
         let minDistance = Infinity;
-        macGroups.forEach(macGroup => {
-          if (Math.abs(macGroup.position.z - object.position.z) < 0.001) {
-            const dx = macGroup.position.x - object.position.x;
-            const dy = macGroup.position.y - object.position.y;
+        // Search through MACs in this layer group.
+        this.layerGroups[thisZ].traverse(child => {
+          if (child.userData && child.userData.type === 'mac') {
+            const dx = child.position.x - object.position.x;
+            const dy = child.position.y - object.position.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < minDistance) {
               minDistance = dist;
-              closestMac = macGroup;
+              closestMac = child;
             }
           }
         });
-
         if (closestMac) {
           object.position.sub(closestMac.position);
           closestMac.add(object);
         } else {
-          this.sceneManager.add(object);
+          // If no MAC found, add directly to layer group.
+          this.layerGroups[thisZ].add(object);
         }
-
-        // Store object in layerGroups for uniform scaling
-        if (!this.layerGroups[thisZ]) {
-          this.layerGroups[thisZ] = [];
-        }
-        this.layerGroups[thisZ].push(object);
       }
     });
-
-    // 5) Build the input layer from real W&B data if available
+  
+    // 5) Build input layer if available.
     if (inputDims && inputDims.width && inputDims.height) {
       this.createInputGrid(inputDims.width, inputDims.height, inputActivations);
-      // Register the entire inputGridGroup under inputGridZ
       if (!this.layerGroups[this.inputGridZ]) {
-        this.layerGroups[this.inputGridZ] = [];
+        const inputGroup = new THREE.Group();
+        // Set input group's Z as desired.
+        inputGroup.position.set(0, 0, this.inputGridGroup.position.z);
+        this.layerGroups[this.inputGridZ] = inputGroup;
+        this.sceneManager.add(inputGroup);
       }
-      this.layerGroups[this.inputGridZ].push(this.inputGridGroup);
+      this.layerGroups[this.inputGridZ].add(this.inputGridGroup);
     }
-
-    // 6) Create a single uniform scale slider for each layer, including the input.
+  
+    // 6) Create uniform scaling sliders for each layer.
     this.generateUniformScaleSliders();
-  }
+  }  
 
   /**
    * Creates an entire input grid in a single group.
    * We store it in "this.inputGridGroup" so we can do uniform scaling on it.
    */
   createInputGrid(cols, rows, activations = {}) {
-    // [ADDED] If we already had one, remove it from the scene
+    // If we already have one, (optionally) remove it from the scene.
+    // (Ensure that you're not adding it directly.)
     if (this.inputGridGroup) {
-      this.scene.remove(this.inputGridGroup);
+      // If you previously added it directly, remove that line.
+      // this.scene.remove(this.inputGridGroup);
     }
-    // Create fresh group for the input layer
+    // Create a fresh group for the input layer.
     this.inputGridGroup = new THREE.Group();
-
-    // [PRESERVED from your snippet: position it at Z=-10 or whatever you prefer]
+  
+    // Set position (for example, at Z = -10).
     this.inputGridGroup.position.set(0, 0, -10);
-    this.scene.add(this.inputGridGroup);
-
+    // Do NOT add this.inputGridGroup directly to the scene.
+    // Instead, buildFromLayers will add it via its layer group.
+  
     const hexSize = 2.0;
     const macSpacing = 3.0;
-    // [MODIFIED] zOffset = 0 so that the group itself is at -10 in world space
     const zOffset = 0;  
-
+  
     for (let rowIdx = 0; rowIdx < rows; rowIdx++) {
       for (let colIdx = 0; colIdx < cols; colIdx++) {
         const x = colIdx * macSpacing;
@@ -312,16 +290,16 @@ export class UIManager {
         if (colIdx % 2 !== 0) {
           y += (Math.sqrt(3) * hexSize) / 2;
         }
-
-        // Activation check
+  
+        // Activation check.
         const macIndex = rowIdx * cols + colIdx + 1;
         const isActive = (activations[macIndex] === 1);
-
-        // Create shape
+  
+        // Create shape.
         const shape = new THREE.Shape();
         this.drawHexagon(shape, hexSize);
-
-        // Fill
+  
+        // Fill.
         const fillGeometry = new THREE.ShapeGeometry(shape);
         const fillMaterial = new THREE.MeshBasicMaterial({
           color: 0xffcccc,
@@ -330,8 +308,8 @@ export class UIManager {
           side: THREE.DoubleSide
         });
         const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
-
-        // Outline
+  
+        // Outline.
         const points = shape.getPoints();
         const outlineGeometry = new THREE.BufferGeometry().setFromPoints(points);
         const outlineMaterial = new THREE.LineBasicMaterial({
@@ -339,30 +317,30 @@ export class UIManager {
           linewidth: 1
         });
         const outlineMesh = new THREE.LineLoop(outlineGeometry, outlineMaterial);
-
-        // Group them
+  
+        // Group fill and outline.
         const cellGroup = new THREE.Group();
         cellGroup.add(fillMesh);
         cellGroup.add(outlineMesh);
-
-        // Center horizontally & vertically, but keep Z=0
+  
+        // Center the cell group (keep Z = 0 here).
         cellGroup.position.set(
           x - ((cols - 1) * macSpacing) / 2,
           y - ((rows - 1) * Math.sqrt(3) * hexSize) / 2,
           zOffset
         );
-
+  
         this.inputGridGroup.add(cellGroup);
       }
     }
-  }
+  }  
 
  /**
  * Creates a styled box (using CSS) that contains the "Individual Layer Controls"
  * title and, for each layer, a subheading and a row with a "Scaling:" label, a slider, 
  * and a reset button. Dividers are inserted between layer groups.
  */
-generateUniformScaleSliders() {
+ generateUniformScaleSliders() {
   const leftPanel = document.getElementById('left-side-panel');
   if (!leftPanel) return;
 
@@ -385,29 +363,24 @@ generateUniformScaleSliders() {
   title.style.fontStyle = 'italic';
   scaleContainer.appendChild(title);
 
-  // Collect, sort, and then reverse the z-values from our layerGroups
-  const zValues = Object.keys(this.layerGroups)
-    .map(z => parseFloat(z))
-    .sort((a, b) => a - b)
-    .reverse();
+  // Get the keys (z-values) for which we have layer groups.
+  const zKeys = Object.keys(this.layerGroups)
+                    .map(z => parseFloat(z))
+                    .sort((a, b) => a - b)
+                    .reverse();
 
-  // For each z-value, create a slider group.
-  zValues.forEach((zVal, index) => {
+  zKeys.forEach((zVal, index) => {
     let labelName;
     if (zVal === this.inputGridZ) {
       labelName = 'Input Layer';
     } else if (this.zToIndexMap && this.zToIndexMap[zVal] != null) {
-      const layerIndex = this.zToIndexMap[zVal];
-      labelName = `Layer ${layerIndex}`;
+      labelName = `Layer ${this.zToIndexMap[zVal]}`;
     } else {
       labelName = `Layer Z=${zVal}`;
     }
-
-    // Create a container for this layer's controls.
     const layerContainer = document.createElement('div');
     layerContainer.className = 'layer-container';
 
-    // Create a subheading for the layer.
     const subheading = document.createElement('h5');
     subheading.textContent = labelName;
     subheading.className = 'layer-subheading';
@@ -416,20 +389,17 @@ generateUniformScaleSliders() {
     subheading.style.textAlign = 'center';
     layerContainer.appendChild(subheading);
 
-    // Create a row for the scaling controls.
     const sliderRow = document.createElement('div');
     sliderRow.className = 'slider-row';
     sliderRow.style.display = 'flex';
     sliderRow.style.alignItems = 'center';
 
-    // Create a label for the slider.
     const scalingLabel = document.createElement('label');
     scalingLabel.textContent = 'Scaling:';
     scalingLabel.className = 'scaling-label';
     scalingLabel.style.marginRight = '8px';
     sliderRow.appendChild(scalingLabel);
 
-    // Create the slider.
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = '0.1';
@@ -438,44 +408,35 @@ generateUniformScaleSliders() {
     slider.value = '1.0';
     slider.className = 'layer-slider';
     slider.style.setProperty('width', '150px', 'important');
+    // Scale the entire layer group.
     slider.addEventListener('input', (evt) => {
       const scaleVal = parseFloat(evt.target.value);
-      if (this.layerGroups[zVal]) {
-        this.layerGroups[zVal].forEach(obj => {
-          obj.scale.set(scaleVal, scaleVal, scaleVal);
-        });
-      }
+      this.layerGroups[zVal].scale.set(scaleVal, scaleVal, scaleVal);
     });
     sliderRow.appendChild(slider);
 
-    // Create the reset button.
     const resetBtn = document.createElement('button');
     resetBtn.textContent = 'Reset';
     resetBtn.className = 'slider-reset-btn';
     resetBtn.style.marginLeft = '8px';
     resetBtn.style.padding = '2px 6px';
     resetBtn.style.fontSize = '0.8em';
-    resetBtn.addEventListener('click', (evt) => {
+    resetBtn.addEventListener('click', () => {
       slider.value = '1.0';
-      if (this.layerGroups[zVal]) {
-        this.layerGroups[zVal].forEach(obj => {
-          obj.scale.set(1, 1, 1);
-        });
-      }
+      this.layerGroups[zVal].scale.set(1, 1, 1);
     });
     sliderRow.appendChild(resetBtn);
 
-    // Append the slider row to the layer container.
     layerContainer.appendChild(sliderRow);
 
-    // Create a toggle row for showing/hiding MACs, CMs, and Neurons
+    // Create a toggle row for showing/hiding MAC visuals, CMs, and Neurons.
     const toggleRow = document.createElement('div');
     toggleRow.className = 'toggle-row';
     toggleRow.style.display = 'flex';
     toggleRow.style.justifyContent = 'space-around';
     toggleRow.style.marginTop = '5px';
 
-    // MACs toggle checkbox
+    // MACs toggle checkbox.
     const macCheckbox = document.createElement('input');
     macCheckbox.type = 'checkbox';
     macCheckbox.id = `toggle-mac-${zVal}`;
@@ -486,7 +447,7 @@ generateUniformScaleSliders() {
     macLabel.textContent = 'MACs';
     toggleRow.appendChild(macLabel);
 
-    // CMs toggle checkbox
+    // CMs toggle checkbox.
     const cmCheckbox = document.createElement('input');
     cmCheckbox.type = 'checkbox';
     cmCheckbox.id = `toggle-cm-${zVal}`;
@@ -497,7 +458,7 @@ generateUniformScaleSliders() {
     cmLabel.textContent = 'CMs';
     toggleRow.appendChild(cmLabel);
 
-    // Neurons toggle checkbox
+    // Neurons toggle checkbox.
     const neuronCheckbox = document.createElement('input');
     neuronCheckbox.type = 'checkbox';
     neuronCheckbox.id = `toggle-neuron-${zVal}`;
@@ -508,64 +469,65 @@ generateUniformScaleSliders() {
     neuronLabel.textContent = 'Neurons';
     toggleRow.appendChild(neuronLabel);
 
-    // Append the toggle row to the layer's container
     layerContainer.appendChild(toggleRow);
 
-    // Event listener for MACs toggle
+    // --- Updated MACs toggle: Only toggle MAC visuals (fill and outline), not internal CMs/neurons.
     macCheckbox.addEventListener('change', () => {
       const show = macCheckbox.checked;
       if (this.layerGroups[zVal]) {
-        this.layerGroups[zVal].forEach(obj => {
-          if (obj.userData && obj.userData.type === 'mac') {
-            obj.visible = show;
-            if (show) {
-              // Add back to clickableMACs if not already present
-              if (!this.clickableMACs.includes(obj)) {
-                this.clickableMACs.push(obj);
-              }
-            } else {
-              // Remove from clickableMACs so they become untoggleable while hidden
-              const idx = this.clickableMACs.indexOf(obj);
+        // Traverse the layer group and toggle only those objects flagged as MAC visuals.
+        this.layerGroups[zVal].traverse(child => {
+          if (child.userData && child.userData.isMacVisual) {
+            child.visible = show;
+          }
+        });
+        // The clickableMACs update logic remains unchanged.
+        if (show) {
+          this.layerGroups[zVal].traverse(child => {
+            if (child.userData && child.userData.type === 'mac' && !this.clickableMACs.includes(child)) {
+              this.clickableMACs.push(child);
+            }
+          });
+        } else {
+          this.layerGroups[zVal].traverse(child => {
+            if (child.userData && child.userData.type === 'mac') {
+              const idx = this.clickableMACs.indexOf(child);
               if (idx > -1) {
                 this.clickableMACs.splice(idx, 1);
               }
             }
-          }
-        });
+          });
+        }
       }
-    });
+    });    
 
-    // Event listener for CMs toggle
+    // CMs toggle.
     cmCheckbox.addEventListener('change', () => {
       const show = cmCheckbox.checked;
       if (this.layerGroups[zVal]) {
-        this.layerGroups[zVal].forEach(obj => {
-          if (obj.userData && obj.userData.type === 'cm') {
-            obj.visible = show;
+        this.layerGroups[zVal].traverse(child => {
+          if (child.userData && child.userData.type === 'cm') {
+            child.visible = show;
           }
         });
       }
     });
 
-    // Event listener for Neurons toggle
+    // Neurons toggle.
     neuronCheckbox.addEventListener('change', () => {
       const show = neuronCheckbox.checked;
       if (this.layerGroups[zVal]) {
-        this.layerGroups[zVal].forEach(obj => {
-          if (obj.userData && obj.userData.type === 'neuron') {
-            obj.visible = show;
+        this.layerGroups[zVal].traverse(child => {
+          if (child.userData && child.userData.type === 'neuron') {
+            child.visible = show;
           }
         });
       }
     });
 
-    // --- End toggle controls block ---
-
-    // Append the layer container to the scaling controls container.
     scaleContainer.appendChild(layerContainer);
 
-    // If this is not the last layer, insert a divider.
-    if (index < zValues.length - 1) {
+    if (index < zKeys.length - 1) {
       const divider = document.createElement('hr');
       divider.className = 'slider-divider';
       scaleContainer.appendChild(divider);
@@ -659,7 +621,6 @@ generateUniformScaleSliders() {
     this.selectedMACs.forEach(macGroup => {
       if (macGroup.userData.isSelected) {
         macGroup.userData.outlineLine.material.color.set(0x000000);
-        macGroup.position.z = macGroup.userData.originalZ;
         macGroup.userData.isSelected = false;
         if (macGroup.userData.innerOutline) {
           macGroup.remove(macGroup.userData.innerOutline);
