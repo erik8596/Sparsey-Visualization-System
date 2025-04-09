@@ -100,8 +100,8 @@ main {
 #left-side-panel {
   position: fixed;
   left: 0;
-  top: 150px; /* Stops below header */
-  height: calc(100vh - 150px);
+  top: 90px; /* Stops below header */
+  height: calc(100vh - 90px);
   width: 300px;
   background-color: #333;
   color: white;
