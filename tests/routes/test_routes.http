@@ -1,0 +1,28 @@
+@baseUrl = http://localhost:8000
+@project_name = post_presentation_4
+@run_id = u797iy16
+
+
+### get projects
+GET {{baseUrl}}/api/projects
+
+### get project runs
+GET {{baseUrl}}/api/{{project_name}}/runs
+
+### set project
+POST {{baseUrl}}/api/update-project/{{project_name}}
+
+### set run
+POST {{baseUrl}}/api/update-run/{{project_name}}/{{run_id}}
+
+### get model config
+GET {{baseUrl}}/api/{{project_name}}/{{run_id}}/model_config
+
+### get run history
+GET {{baseUrl}}/api/{{project_name}}/{{run_id}}/history
+
+### get visualization data
+GET {{baseUrl}}/api/{{project_name}}/{{run_id}}/visualize
+
+### get status
+GET {{baseUrl}}/api/status
