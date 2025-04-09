@@ -18,7 +18,7 @@ def create_app(config_name: str = None) -> Flask:
     )
 
     # Use environment variable if config_name not provided
-    if config_name is None:
+    if not config_name:
         config_name = env.get('FLASK_ENV', 'default')
 
     # Load the config

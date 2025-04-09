@@ -118,8 +118,11 @@ def get_run_history(project_name, run_id):
     Fetches the history of a specific run in a project.
     """
     try:
-        history = wbf.get_run_history(run_id=run_id, project_name=project_name)
-        return jsonify({'history': history})
+        history = wbf.fetch_run_history(
+            run_id=run_id,
+            project_name=project_name,
+        )
+        return jsonify({'step_history': history})
     except Exception as e:
         print(f"API: Error fetching run history - {str(e)}")
         return jsonify({'error': str(e), 'history': []}), 500

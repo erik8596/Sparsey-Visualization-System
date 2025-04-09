@@ -266,7 +266,10 @@ class WandBFacade:
         )
 
         try:
-            self.run_history = run.scan_history()
+            step_history = {}
+            for step in run.scan_history():
+                step_history[step['_step']] = step
+            self.run_history = step_history
             return self.run_history
         except Exception as e:
             self._handle_api_error("run history fetching", e)

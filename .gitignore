@@ -16,6 +16,7 @@ __pycache__/
 
 # local build
 sparsey_visualization_presentation.egg-info/
+sparseypy_svs.egg-info/
 
 ruf/
 

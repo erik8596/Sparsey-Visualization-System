@@ -29,9 +29,9 @@ class ModelConfig:
             if not model_config:
                 raise ValueError(f"No layers found in WandB run {run.id}")
 
-            print("\n=== Raw Model Config ===")
-            print(model_config)
-            print("===================================\n")
+            # print("\n=== Raw Model Config ===")
+            # print(model_config)
+            # print("===================================\n")
 
             return model_config
 
