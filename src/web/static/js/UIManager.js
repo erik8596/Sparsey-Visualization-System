@@ -178,6 +178,7 @@ export class UIManager {
         } else if (element.type === 'neuron') {
           const shape = new THREE.Shape();
           this.drawCircle(shape, 0.10);
+        
           if (element.active) {
             const fillGeometry = new THREE.ShapeGeometry(shape);
             const intensity = element.raw_activation || 0;
@@ -186,9 +187,14 @@ export class UIManager {
               color: color,
               side: THREE.DoubleSide,
               transparent: true,
-              opacity: 0.8
+              opacity: 0.8,
+              depthTest: false // Disable depth testing so neurons are not occluded
             });
             object = new THREE.Mesh(fillGeometry, fillMaterial);
+            // Push neurons slightly in front of the MAC fill.
+            object.position.z += 0.2;
+            // Optionally, enforce a higher renderOrder.
+            object.renderOrder = 10;
           } else {
             const points = shape.getPoints();
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
@@ -200,13 +206,15 @@ export class UIManager {
             });
             object = new THREE.LineLoop(geometry, material);
           }
+          
           if (element.raw_activation !== undefined) {
             object.userData.raw_activation = element.raw_activation;
           }
           if (element.avg_activation !== undefined) {
             object.userData.avg_activation = element.avg_activation;
           }
-        }
+        }                
+
         object.userData = Object.assign({}, element);
         object.userData.type = element.type;
         const thisZ = element.z;
