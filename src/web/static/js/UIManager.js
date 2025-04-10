@@ -23,11 +23,14 @@ export class UIManager {
     // [PRESERVED] original property from old snippet
     this.layerGroups = {};
 
-    // We'll store the entire input layer in a single group at a special z
-    // [PRESERVED + used in the updated code]
+    // We'll store the entire input layer in a single group at a special key.
+    // Old: this.inputGridZ = -10;
+    // New:
+    this.inputGridKey = 'input';
     this.inputGridGroup = null;
-    // [PRESERVED] "fake" z-value for input layer
-    this.inputGridZ = -9999;
+
+    // Global variable to control layer spacing; default is 10.
+    this.layerSpacing = 10;
 
     this.clickableMACs = [];
     this.selectedMACs = [];
@@ -85,17 +88,23 @@ export class UIManager {
     });
   
     console.log("[DEBUG] All layer z-values (unfiltered):", layers.map(el => el.z));
-    console.log("[DEBUG] inputGridZ is:", this.inputGridZ);
+    console.log("[DEBUG] inputGridKey is:", this.inputGridKey);
   
-    // Build z -> layerIndex map (excluding input layer)
-    const relevantZValues = layers.map(el => el.z).filter(z => z !== this.inputGridZ);
-    const uniqueZValues = [...new Set(relevantZValues)].sort((a, b) => a - b);
+    // Build mapping for even layer spacing.
+    // Use special key for input layer.
     const zToIndexMap = {};
+    zToIndexMap[this.inputGridKey] = 0; // input layer gets index 0
+
+    // Get all raw z values from data layers (for MAC, CM, neuron)
+    const relevantZValues = layers.map(el => el.z);
+    // Create a sorted list of unique z values.
+    const uniqueZValues = [...new Set(relevantZValues)].sort((a, b) => a - b);
+    // Assign indices to these values starting at 1.
     uniqueZValues.forEach((zVal, idx) => {
       zToIndexMap[zVal] = idx + 1;
     });
-    console.log("[DEBUG] zToIndexMap:", zToIndexMap);
     this.zToIndexMap = zToIndexMap;
+    console.log("[DEBUG] zToIndexMap:", zToIndexMap);
   
     // 3) First pass: build MAC composites.
     layers.forEach(element => {
@@ -150,15 +159,15 @@ export class UIManager {
         );
   
         // Create or reuse a layer group for this z.
-        if (!this.layerGroups[thisZ]) {
+        if (!this.layerGroups[element.z]) {
           const layerGroup = new THREE.Group();
-          // Set the layer group's position so that its Z is the layer's z.
-          layerGroup.position.set(0, 0, thisZ);
-          this.layerGroups[thisZ] = layerGroup;
+          // Set the layer group's position evenly: index * this.layerSpacing.
+          layerGroup.position.set(0, 0, this.layerSpacing * zToIndexMap[element.z]);
+          this.layerGroups[element.z] = layerGroup;
           this.sceneManager.add(layerGroup);
         }
         // Add the MAC group to the layer group.
-        this.layerGroups[thisZ].add(macGroup);
+        this.layerGroups[element.z].add(macGroup);
         // Mark macGroup as clickable.
         this.clickableMACs.push(macGroup);
       }
@@ -199,7 +208,7 @@ export class UIManager {
             const points = shape.getPoints();
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
             const material = new THREE.LineBasicMaterial({
-              color: 0x444444,
+              color: 0x000000,
               linewidth: 1,
               transparent: true,
               opacity: 0.2
@@ -254,18 +263,20 @@ export class UIManager {
     // 5) Build input layer if available.
     if (inputDims && inputDims.width && inputDims.height) {
       this.createInputGrid(inputDims.width, inputDims.height, inputActivations);
-      if (!this.layerGroups[this.inputGridZ]) {
+      if (!this.layerGroups[this.inputGridKey]) {
         const inputGroup = new THREE.Group();
-        // Set input group's Z as desired.
-        inputGroup.position.set(0, 0, this.inputGridGroup.position.z);
-        this.layerGroups[this.inputGridZ] = inputGroup;
+        // Set input group's position evenly: index * this.layerSpacing (0 * spacing = 0)
+        inputGroup.position.set(0, 0, this.layerSpacing * zToIndexMap[this.inputGridKey]);
+        this.layerGroups[this.inputGridKey] = inputGroup;
         this.sceneManager.add(inputGroup);
       }
-      this.layerGroups[this.inputGridZ].add(this.inputGridGroup);
+      this.layerGroups[this.inputGridKey].add(this.inputGridGroup);
     }
   
     // 6) Create uniform scaling sliders for each layer.
     this.generateUniformScaleSliders();
+    // 7) Generate the separate "Full Model Controls" box.
+    this.generateFullModelControls();
   }  
 
   /**
@@ -274,7 +285,6 @@ export class UIManager {
    */
   createInputGrid(cols, rows, activations = {}) {
     // If we already have one, (optionally) remove it from the scene.
-    // (Ensure that you're not adding it directly.)
     if (this.inputGridGroup) {
       // If you previously added it directly, remove that line.
       // this.scene.remove(this.inputGridGroup);
@@ -282,8 +292,8 @@ export class UIManager {
     // Create a fresh group for the input layer.
     this.inputGridGroup = new THREE.Group();
   
-    // Set position (for example, at Z = -10).
-    this.inputGridGroup.position.set(0, 0, -10);
+    // Set position now at 0 (instead of a hard-coded -10)
+    this.inputGridGroup.position.set(0, 0, 0);
     // Do NOT add this.inputGridGroup directly to the scene.
     // Instead, buildFromLayers will add it via its layer group.
   
@@ -343,205 +353,345 @@ export class UIManager {
     }
   }  
 
- /**
- * Creates a styled box (using CSS) that contains the "Individual Layer Controls"
- * title and, for each layer, a subheading and a row with a "Scaling:" label, a slider, 
- * and a reset button. Dividers are inserted between layer groups.
- */
- generateUniformScaleSliders() {
-  const leftPanel = document.getElementById('left-side-panel');
-  if (!leftPanel) return;
+  /**
+   * Creates a styled box (using CSS) that contains the "Individual Layer Controls"
+   * title and, for each layer, a subheading and a row with a "Scaling:" label, a slider, 
+   * and a reset button. Dividers are inserted between layer groups.
+   */
+  generateUniformScaleSliders() {
+    const leftPanel = document.getElementById('left-side-panel');
+    if (!leftPanel) return;
 
-  // Create or reuse the scaling controls container.
-  let scaleContainer = document.getElementById('uniform-layer-scales');
-  if (!scaleContainer) {
-    scaleContainer = document.createElement('div');
-    scaleContainer.id = 'uniform-layer-scales';
-    leftPanel.appendChild(scaleContainer);
-  } else {
-    scaleContainer.innerHTML = '';
-  }
-
-  // Add the title inside the box.
-  const title = document.createElement('h4');
-  title.textContent = 'Individual Layer Controls';
-  title.style.marginTop = '0';
-  title.style.marginBottom = '5px';
-  title.style.textAlign = 'center';
-  title.style.fontStyle = 'italic';
-  scaleContainer.appendChild(title);
-
-  // Get the keys (z-values) for which we have layer groups.
-  const zKeys = Object.keys(this.layerGroups)
-                    .map(z => parseFloat(z))
-                    .sort((a, b) => a - b)
-                    .reverse();
-
-  zKeys.forEach((zVal, index) => {
-    let labelName;
-    if (zVal === this.inputGridZ) {
-      labelName = 'Input Layer';
-    } else if (this.zToIndexMap && this.zToIndexMap[zVal] != null) {
-      labelName = `Layer ${this.zToIndexMap[zVal]}`;
+    // Create or reuse the scaling controls container.
+    let scaleContainer = document.getElementById('uniform-layer-scales');
+    if (!scaleContainer) {
+      scaleContainer = document.createElement('div');
+      scaleContainer.id = 'uniform-layer-scales';
+      scaleContainer.className = 'side-panel-box';
+      scaleContainer.style.marginTop = '20px';
+      scaleContainer.style.padding = '10px';
+      leftPanel.appendChild(scaleContainer);
     } else {
-      labelName = `Layer Z=${zVal}`;
+      scaleContainer.innerHTML = '';
     }
-    const layerContainer = document.createElement('div');
-    layerContainer.className = 'layer-container';
 
-    const subheading = document.createElement('h5');
-    subheading.textContent = labelName;
-    subheading.className = 'layer-subheading';
-    subheading.style.margin = '0';
-    subheading.style.marginBottom = '5px';
-    subheading.style.textAlign = 'center';
-    layerContainer.appendChild(subheading);
+    // Add the title inside the box.
+    const title = document.createElement('h4');
+    title.textContent = 'Individual Layer Controls';
+    title.style.marginTop = '0';
+    title.style.marginBottom = '5px';
+    title.style.textAlign = 'center';
+    title.style.fontStyle = 'italic';
+    scaleContainer.appendChild(title);
 
-    const sliderRow = document.createElement('div');
-    sliderRow.className = 'slider-row';
-    sliderRow.style.display = 'flex';
-    sliderRow.style.alignItems = 'center';
+    // Get the keys for which we have layer groups.
+    const zKeys = Object.keys(this.layerGroups).sort((a, b) => {
+      if (a === this.inputGridKey) return -1;
+      if (b === this.inputGridKey) return 1;
+      return Number(a) - Number(b);
+    }).reverse();
 
-    const scalingLabel = document.createElement('label');
-    scalingLabel.textContent = 'Scaling:';
-    scalingLabel.className = 'scaling-label';
-    scalingLabel.style.marginRight = '8px';
-    sliderRow.appendChild(scalingLabel);
+    zKeys.forEach((key, index) => {
+      let labelName;
+      if (key === this.inputGridKey) {
+        labelName = 'Input Layer';
+      } else if (this.zToIndexMap && this.zToIndexMap[key] != null) {
+        labelName = `Layer ${this.zToIndexMap[key]}`;
+      } else {
+        labelName = `Layer Z=${key}`;
+      }
+      const layerContainer = document.createElement('div');
+      layerContainer.className = 'layer-container';
 
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '0.1';
-    slider.max = '3.0';
-    slider.step = '0.05';
-    slider.value = '1.0';
-    slider.className = 'layer-slider';
-    slider.style.setProperty('width', '150px', 'important');
-    // Scale the entire layer group.
-    slider.addEventListener('input', (evt) => {
-      const scaleVal = parseFloat(evt.target.value);
-      this.layerGroups[zVal].scale.set(scaleVal, scaleVal, scaleVal);
-    });
-    sliderRow.appendChild(slider);
+      const subheading = document.createElement('h5');
+      subheading.textContent = labelName;
+      subheading.className = 'layer-subheading';
+      subheading.style.margin = '0';
+      subheading.style.marginBottom = '5px';
+      subheading.style.textAlign = 'center';
+      layerContainer.appendChild(subheading);
 
-    const resetBtn = document.createElement('button');
-    resetBtn.textContent = 'Reset';
-    resetBtn.className = 'slider-reset-btn';
-    resetBtn.style.marginLeft = '8px';
-    resetBtn.style.padding = '2px 6px';
-    resetBtn.style.fontSize = '0.8em';
-    resetBtn.addEventListener('click', () => {
+      const sliderRow = document.createElement('div');
+      sliderRow.className = 'slider-row';
+      sliderRow.style.display = 'flex';
+      sliderRow.style.alignItems = 'center';
+
+      const scalingLabel = document.createElement('label');
+      scalingLabel.textContent = 'Scaling:';
+      scalingLabel.className = 'scaling-label';
+      scalingLabel.style.marginRight = '8px';
+      sliderRow.appendChild(scalingLabel);
+
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = '0.1';
+      slider.max = '3.0';
+      slider.step = '0.05';
       slider.value = '1.0';
-      this.layerGroups[zVal].scale.set(1, 1, 1);
-    });
-    sliderRow.appendChild(resetBtn);
+      slider.className = 'layer-slider';
+      slider.style.setProperty('width', '150px', 'important');
+      // Scale the entire layer group.
+      slider.addEventListener('input', (evt) => {
+        const scaleVal = parseFloat(evt.target.value);
+        this.layerGroups[key].scale.set(scaleVal, scaleVal, scaleVal);
+      });
+      sliderRow.appendChild(slider);
 
-    layerContainer.appendChild(sliderRow);
+      const resetBtn = document.createElement('button');
+      resetBtn.textContent = 'Reset';
+      resetBtn.className = 'slider-reset-btn';
+      resetBtn.style.marginLeft = '8px';
+      resetBtn.style.padding = '2px 6px';
+      resetBtn.style.fontSize = '0.8em';
+      resetBtn.addEventListener('click', () => {
+        slider.value = '1.0';
+        this.layerGroups[key].scale.set(1, 1, 1);
+      });
+      sliderRow.appendChild(resetBtn);
 
-    // Create a toggle row for showing/hiding MAC visuals, CMs, and Neurons.
-    const toggleRow = document.createElement('div');
-    toggleRow.className = 'toggle-row';
-    toggleRow.style.display = 'flex';
-    toggleRow.style.justifyContent = 'space-around';
-    toggleRow.style.marginTop = '5px';
+      layerContainer.appendChild(sliderRow);
 
-    // MACs toggle checkbox.
-    const macCheckbox = document.createElement('input');
-    macCheckbox.type = 'checkbox';
-    macCheckbox.id = `toggle-mac-${zVal}`;
-    macCheckbox.checked = true;
-    toggleRow.appendChild(macCheckbox);
-    const macLabel = document.createElement('label');
-    macLabel.htmlFor = `toggle-mac-${zVal}`;
-    macLabel.textContent = 'MACs';
-    toggleRow.appendChild(macLabel);
+      // Create a toggle row for showing/hiding MAC visuals, CMs, and Neurons.
+      const toggleRow = document.createElement('div');
+      toggleRow.className = 'toggle-row';
+      toggleRow.style.display = 'flex';
+      toggleRow.style.justifyContent = 'space-around';
+      toggleRow.style.marginTop = '5px';
 
-    // CMs toggle checkbox.
-    const cmCheckbox = document.createElement('input');
-    cmCheckbox.type = 'checkbox';
-    cmCheckbox.id = `toggle-cm-${zVal}`;
-    cmCheckbox.checked = true;
-    toggleRow.appendChild(cmCheckbox);
-    const cmLabel = document.createElement('label');
-    cmLabel.htmlFor = `toggle-cm-${zVal}`;
-    cmLabel.textContent = 'CMs';
-    toggleRow.appendChild(cmLabel);
+      // MACs toggle checkbox.
+      const macCheckbox = document.createElement('input');
+      macCheckbox.type = 'checkbox';
+      macCheckbox.id = `toggle-mac-${key}`;
+      macCheckbox.checked = true;
+      toggleRow.appendChild(macCheckbox);
+      const macLabel = document.createElement('label');
+      macLabel.htmlFor = `toggle-mac-${key}`;
+      macLabel.textContent = 'MACs';
+      toggleRow.appendChild(macLabel);
 
-    // Neurons toggle checkbox.
-    const neuronCheckbox = document.createElement('input');
-    neuronCheckbox.type = 'checkbox';
-    neuronCheckbox.id = `toggle-neuron-${zVal}`;
-    neuronCheckbox.checked = true;
-    toggleRow.appendChild(neuronCheckbox);
-    const neuronLabel = document.createElement('label');
-    neuronLabel.htmlFor = `toggle-neuron-${zVal}`;
-    neuronLabel.textContent = 'Neurons';
-    toggleRow.appendChild(neuronLabel);
+      // CMs toggle checkbox.
+      const cmCheckbox = document.createElement('input');
+      cmCheckbox.type = 'checkbox';
+      cmCheckbox.id = `toggle-cm-${key}`;
+      cmCheckbox.checked = true;
+      toggleRow.appendChild(cmCheckbox);
+      const cmLabel = document.createElement('label');
+      cmLabel.htmlFor = `toggle-cm-${key}`;
+      cmLabel.textContent = 'CMs';
+      toggleRow.appendChild(cmLabel);
 
-    layerContainer.appendChild(toggleRow);
+      // Neurons toggle checkbox.
+      const neuronCheckbox = document.createElement('input');
+      neuronCheckbox.type = 'checkbox';
+      neuronCheckbox.id = `toggle-neuron-${key}`;
+      neuronCheckbox.checked = true;
+      toggleRow.appendChild(neuronCheckbox);
+      const neuronLabel = document.createElement('label');
+      neuronLabel.htmlFor = `toggle-neuron-${key}`;
+      neuronLabel.textContent = 'Neurons';
+      toggleRow.appendChild(neuronLabel);
 
-    // --- Updated MACs toggle: Only toggle MAC visuals (fill and outline), not internal CMs/neurons.
-    macCheckbox.addEventListener('change', () => {
-      const show = macCheckbox.checked;
-      if (this.layerGroups[zVal]) {
-        // Traverse the layer group and toggle only those objects flagged as MAC visuals.
-        this.layerGroups[zVal].traverse(child => {
-          if (child.userData && child.userData.isMacVisual) {
-            child.visible = show;
-          }
-        });
-        // The clickableMACs update logic remains unchanged.
-        if (show) {
-          this.layerGroups[zVal].traverse(child => {
-            if (child.userData && child.userData.type === 'mac' && !this.clickableMACs.includes(child)) {
-              this.clickableMACs.push(child);
+      layerContainer.appendChild(toggleRow);
+
+      // --- Updated MACs toggle: Only toggle MAC visuals (fill and outline), not internal CMs/neurons.
+      macCheckbox.addEventListener('change', () => {
+        const show = macCheckbox.checked;
+        if (this.layerGroups[key]) {
+          // Traverse the layer group and toggle only those objects flagged as MAC visuals.
+          this.layerGroups[key].traverse(child => {
+            if (child.userData && child.userData.isMacVisual) {
+              child.visible = show;
             }
           });
-        } else {
-          this.layerGroups[zVal].traverse(child => {
-            if (child.userData && child.userData.type === 'mac') {
-              const idx = this.clickableMACs.indexOf(child);
-              if (idx > -1) {
-                this.clickableMACs.splice(idx, 1);
+          // The clickableMACs update logic remains unchanged.
+          if (show) {
+            this.layerGroups[key].traverse(child => {
+              if (child.userData && child.userData.type === 'mac' && !this.clickableMACs.includes(child)) {
+                this.clickableMACs.push(child);
               }
+            });
+          } else {
+            this.layerGroups[key].traverse(child => {
+              if (child.userData && child.userData.type === 'mac') {
+                const idx = this.clickableMACs.indexOf(child);
+                if (idx > -1) {
+                  this.clickableMACs.splice(idx, 1);
+                }
+              }
+            });
+          }
+        }
+      });    
+
+      // CMs toggle.
+      cmCheckbox.addEventListener('change', () => {
+        const show = cmCheckbox.checked;
+        if (this.layerGroups[key]) {
+          this.layerGroups[key].traverse(child => {
+            if (child.userData && child.userData.type === 'cm') {
+              child.visible = show;
             }
           });
         }
-      }
-    });    
+      });
 
-    // CMs toggle.
-    cmCheckbox.addEventListener('change', () => {
-      const show = cmCheckbox.checked;
-      if (this.layerGroups[zVal]) {
-        this.layerGroups[zVal].traverse(child => {
-          if (child.userData && child.userData.type === 'cm') {
-            child.visible = show;
-          }
-        });
-      }
-    });
+      // Neurons toggle.
+      neuronCheckbox.addEventListener('change', () => {
+        const show = neuronCheckbox.checked;
+        if (this.layerGroups[key]) {
+          this.layerGroups[key].traverse(child => {
+            if (child.userData && child.userData.type === 'neuron') {
+              child.visible = show;
+            }
+          });
+        }
+      });
 
-    // Neurons toggle.
-    neuronCheckbox.addEventListener('change', () => {
-      const show = neuronCheckbox.checked;
-      if (this.layerGroups[zVal]) {
-        this.layerGroups[zVal].traverse(child => {
-          if (child.userData && child.userData.type === 'neuron') {
-            child.visible = show;
-          }
-        });
+      scaleContainer.appendChild(layerContainer);
+
+      if (index < zKeys.length - 1) {
+        const divider = document.createElement('hr');
+        divider.className = 'slider-divider';
+        scaleContainer.appendChild(divider);
       }
     });
+  }
 
-    scaleContainer.appendChild(layerContainer);
+ /**
+ * Generates a separate "Full Model Controls" box that allows the user to adjust
+ * the layer spacing. This box is created as a separate side-panel box (similar to camera controls)
+ * and is appended directly to the left-side panel.
+ */
+generateFullModelControls() {
+  // Check if the full model controls box already exists.
+  let fullModelContainer = document.getElementById('full-model-controls-box');
+  if (fullModelContainer) {
+    // If it already exists, update the slider value and return.
+    const spacingSlider = fullModelContainer.querySelector("input[type='range']");
+    if (spacingSlider) {
+      spacingSlider.value = this.layerSpacing;
+    }
+    return;
+  }
 
-    if (index < zKeys.length - 1) {
-      const divider = document.createElement('hr');
-      divider.className = 'slider-divider';
-      scaleContainer.appendChild(divider);
+  const leftPanel = document.getElementById('left-side-panel');
+  if (!leftPanel) return;
+
+  // Create the full model controls container.
+  fullModelContainer = document.createElement('div');
+  fullModelContainer.id = 'full-model-controls-box';
+  fullModelContainer.className = 'side-panel-box';
+  fullModelContainer.style.marginTop = '20px';
+  fullModelContainer.style.padding = '10px';
+  // Set the text color of the whole box to black.
+  fullModelContainer.style.color = 'black';
+  
+  // Add a heading.
+  const heading = document.createElement('h4');
+  heading.textContent = 'Full Model Controls';
+  heading.style.marginTop = '0';
+  heading.style.marginBottom = '10px';
+  heading.style.textAlign = 'center';
+  // Style the heading to be italicized and black.
+  heading.style.fontStyle = 'italic';
+  heading.style.color = 'black';
+  fullModelContainer.appendChild(heading);
+
+  // Create a slider control row.
+  const sliderRow = document.createElement('div');
+  sliderRow.className = 'slider-group';
+  sliderRow.style.display = 'flex';
+  sliderRow.style.alignItems = 'center';
+  sliderRow.style.justifyContent = 'center';
+
+  const sliderLabel = document.createElement('label');
+  sliderLabel.textContent = 'Layer Spacing:';
+  sliderLabel.className = 'slider-label';
+  sliderLabel.style.marginRight = '8px';
+  sliderRow.appendChild(sliderLabel);
+
+  const spacingSlider = document.createElement('input');
+  spacingSlider.type = 'range';
+  spacingSlider.min = '5';
+  spacingSlider.max = '50';
+  spacingSlider.step = '0.5';
+  spacingSlider.value = `${this.layerSpacing}`;
+  spacingSlider.className = 'layer-slider';
+  spacingSlider.addEventListener('input', (evt) => {
+    this.layerSpacing = parseFloat(evt.target.value);
+    this.updateLayerSpacing();
+  });
+  sliderRow.appendChild(spacingSlider);
+
+  // Add the reset button (for the slider) to the right of the slider.
+  const resetSpacingBtn = document.createElement('button');
+  resetSpacingBtn.textContent = 'Reset';
+  resetSpacingBtn.className = 'slider-reset-btn';
+  resetSpacingBtn.style.marginLeft = '8px';
+  resetSpacingBtn.style.padding = '2px 6px';
+  resetSpacingBtn.style.fontSize = '0.8em';
+  resetSpacingBtn.addEventListener('click', () => {
+    this.layerSpacing = 10; // Reset to default value.
+    spacingSlider.value = this.layerSpacing;
+    this.updateLayerSpacing();
+  });
+  sliderRow.appendChild(resetSpacingBtn);
+
+  fullModelContainer.appendChild(sliderRow);
+
+  // Add the "RESET MODEL" button centered below the slider row.
+  const resetModelBtn = document.createElement('button');
+  resetModelBtn.textContent = 'RESET MODEL';
+  resetModelBtn.className = 'slider-reset-btn';
+  // Center the button and add some top margin.
+  resetModelBtn.style.display = 'block';
+  resetModelBtn.style.margin = '10px auto 0 auto';
+  resetModelBtn.style.fontSize = '0.8em';
+  resetModelBtn.addEventListener('click', () => {
+    // Reset layer spacing to the default value.
+    this.layerSpacing = 10;
+    spacingSlider.value = this.layerSpacing;
+    this.updateLayerSpacing();
+
+    // Reset scaling for each layer group and unhide all elements.
+    for (const key in this.layerGroups) {
+      this.layerGroups[key].scale.set(1, 1, 1);
+      this.layerGroups[key].traverse(child => child.visible = true);
+    }
+
+    // Update individual layer control sliders back to default and ensure checkboxes are checked.
+    const scaleContainer = document.getElementById('uniform-layer-scales');
+    if (scaleContainer) {
+      const rangeSliders = scaleContainer.querySelectorAll("input[type='range']");
+      rangeSliders.forEach(slider => {
+        slider.value = '1.0';
+        // Dispatch a change event so any attached listeners update internal state.
+        slider.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      
+      const toggleCheckboxes = scaleContainer.querySelectorAll("input[type='checkbox']");
+      toggleCheckboxes.forEach(checkbox => {
+        checkbox.checked = true;
+        // Dispatch a change event so the internal state updates (e.g., clickable MACs).
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      });
     }
   });
+  fullModelContainer.appendChild(resetModelBtn);
+
+  // Append the full model controls container as a separate box.
+  leftPanel.appendChild(fullModelContainer);
 }
+
+  /**
+   * Updates the z-position of each layer group based on the current layer spacing.
+   */
+  updateLayerSpacing() {
+    for (const key in this.layerGroups) {
+      const layerIndex = this.zToIndexMap[key];
+      this.layerGroups[key].position.z = this.layerSpacing * layerIndex;
+    }
+  }
 
   onSceneClick(event) {
     const rect = this.sceneManager.renderer.domElement.getBoundingClientRect();
