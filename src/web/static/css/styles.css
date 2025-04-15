@@ -7,6 +7,11 @@ html {
   font-family: Arial, sans-serif;
 }
 
+/* Hidden class definition */
+.hidden {
+  display: none;
+}
+
 /* Header styles */
 header {
   padding: 10px;
@@ -25,7 +30,7 @@ header h1 {
   align-items: center;
 }
 
-/* Main container holds both the Three.js scene and the side panel */
+/* Main container holds both the Three.js scene and the left panel wrapper */
 main {
   display: flex;
   height: calc(100% - 80px);
@@ -49,7 +54,7 @@ main {
   background-color: #f0f0f0;
 }
 
-/* Side panel for dynamic canvases (if used) */
+/* Side panel for dynamic canvases */
 #side-panel {
   width: 300px;
   padding: 20px;
@@ -96,28 +101,52 @@ main {
   margin-top: 3px;
 }
 
-/* Left Side Panel */
+/* Body state classes: toggle button's transform is set based on state */
+body.panel-closed #toggle-panel-btn {
+  transform: translateX(0);
+  transition-delay: 0s;
+}
+body.panel-open #toggle-panel-btn {
+  transform: translateX(320px);
+  transition-delay: 0.02s; /* Delay added so the toggle button moves slightly later */
+}
+
+/* Toggle button – fixed at bottom with a smooth transform transition */
+#toggle-panel-btn {
+  position: fixed;
+  bottom: 30px;
+  /* transform is controlled by body state */
+  background-color: #333;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  cursor: pointer;
+  font-size: 18px;
+  z-index: 1100;
+  transition: transform 0.3s ease-in-out;
+}
+
+/* Left Side Panel – fixed on the left, slides in/out */
 #left-side-panel {
   position: fixed;
   left: 0;
-  top: 90px; /* Stops below header */
-  height: calc(100vh - 90px);
+  top: 90px; /* below header */
   width: 300px;
+  height: calc(100vh - 90px);
   background-color: #333;
   color: white;
   transition: transform 0.3s ease-in-out;
-  transform: translateX(-100%);
+  /* Initially collapsed: move off-screen by 320px */
+  transform: translateX(-320px);
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 10px;
-  z-index: 1000;
-}
-#left-side-panel.collapsed {
-  transform: translateX(-100%);
+  overflow-y: auto;
+  z-index: 1050;
 }
 #left-side-panel.open {
-  transform: translateX(0);
+  transform: translateX(0) !important;
 }
 
 /* Shared box style for side panel boxes */
@@ -125,14 +154,15 @@ main {
   padding: 10px;
   border-radius: 5px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-  background-color: #ccc;  /* Light gray */
+  background-color: #ccc;
   border: 2px solid #888;
   width: 100%;
   box-sizing: border-box;
   text-align: center;
+  margin-bottom: 10px;
 }
 
-/* Camera control pane styling (uses shared class) */
+/* Camera control pane styling */
 #camera-control-pane {
   margin-top: 20px;
 }
@@ -142,9 +172,9 @@ main {
   color: #000;
 }
 
-/* Styles for the scaling controls box – will match camera control pane */
+/* Uniform Layer Controls (Individual Layer Controls) */
 #uniform-layer-scales {
-  margin-top: 20px; /* Will be appended dynamically to the left-side panel */
+  margin-top: 20px;
   padding: 10px;
   background-color: #ccc;
   border: 2px solid #888;
@@ -154,68 +184,32 @@ main {
   box-sizing: border-box;
   text-align: center;
 }
-
-/* New styles for individual layer controls */
-
-/* Container for each layer's controls */
-.layer-container {
-  margin-bottom: 8px;
-}
-
-/* Subheading for each layer */
-.layer-subheading {
+#uniform-layer-scales h4 {
   margin: 0;
   margin-bottom: 5px;
   text-align: center;
-  font-size: 0.9em;
-  font-weight: bold;
+  font-style: italic;
 }
 
-/* Row for slider controls */
-.slider-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Label for scaling slider row */
-.scaling-label {
-  margin-right: 8px;
-  font-size: 0.8em;
-}
-
-/* Slider styling */
-.layer-slider {
-  width: 150px;
-}
-
-/* Reset button styling */
-.slider-reset-btn {
-  margin-left: 8px;
-  padding: 2px 6px;
-  font-size: 0.8em;
-}
-
-/* Divider styling between layer groups */
-.slider-divider {
+/* Full Model Controls */
+#full-model-controls-box {
+  margin-top: 20px;
+  padding: 10px;
+  background-color: #ccc;
+  border: 2px solid #888;
+  border-radius: 5px;
+  color: black;
   width: 100%;
-  border: none;
-  height: 1px;
-  background-color: #fff;
+  box-sizing: border-box;
+  text-align: center;
 }
-
-/* Additional spacing rules: 
-   - Padding below the "Individual Layer Controls" header
-   - Padding below the last layer's subheading 
-*/
-#uniform-layer-scales h4 {
-  padding-bottom: 5px;
+#full-model-controls-box h4 {
+  margin: 0;
+  margin-bottom: 10px;
+  text-align: center;
+  font-style: italic;
+  color: black;
 }
-.layer-container:last-child .layer-subheading {
-  padding-bottom: 5px;
-}
-
-/* Existing slider group styles (if used) */
 .slider-group {
   margin-bottom: 8px;
   display: flex;
@@ -240,23 +234,6 @@ main {
   background-color: #fff;
 }
 
-/* Panel toggle button */
-#toggle-panel-btn {
-  position: absolute;
-  right: -40px;
-  bottom: 30px;
-  background-color: #333;
-  color: white;
-  border: none;
-  padding: 10px;
-  cursor: pointer;
-  font-size: 18px;
-  z-index: 1001;
-}
-#toggle-panel-btn:hover {
-  background-color: #555;
-}
-
 /* Main canvas container */
 #canvas-container {
   position: relative;
@@ -266,4 +243,32 @@ main {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+/* Additional styling for MAC canvas wrappers and bar graphs */
+.mac-canvas-wrapper {
+  margin-bottom: 10px;
+  text-align: center;
+}
+.mac-canvas-label {
+  margin: 0 0 5px 0;
+}
+.mac-top-canvas {
+  border: 2px solid #ccc;
+  display: block;
+  margin: 0 auto;
+}
+.bar-graph-label {
+  margin: 5px 0;
+  font-style: italic;
+}
+.bar-graph-scroll-container {
+  width: 200px;
+  overflow-x: auto;
+  display: block;
+  margin: 0 auto;
+}
+.bar-graph-canvas {
+  border: 1px solid #ccc;
+  margin-top: 5px;
 }

@@ -11,7 +11,7 @@
   <!-- Custom CSS -->
   <link rel="stylesheet" href="/static/css/styles.css" />
 </head>
-<body>
+<body class="panel-closed">
   <header>
     <h1>Sparsey Visualization</h1>
     <!-- Project and Run Selection -->
@@ -26,7 +26,7 @@
       </select>
       <button id="visualizeButton" disabled>Visualize</button>
     </div>
-    <!-- MAC Details, Reset Button, and Instruction Message Container -->
+    <!-- MAC Details and Reset Button -->
     <div id="mac-details-container">
       <div id="mac-details-row">
         <div id="mac-details-header">MAC Details</div>
@@ -39,33 +39,61 @@
   <main>
     <!-- Left Side Panel -->
     <div id="left-side-panel" class="collapsed">
-      <button id="toggle-panel-btn">☰</button>
-      <!-- Camera control pane directly in the left panel using the shared style -->
       <div id="camera-control-pane" class="side-panel-box">
         <h4 class="camera-controls-header">Camera Controls</h4>
         <button id="panButton">Pan Mode</button>
         <button id="bothButton">Default Mode</button>
         <button id="resetControls">Reset Camera</button>
       </div>
-      <!-- Note: The scaling controls box (#uniform-layer-scales) will be appended dynamically by UIManager -->
+      <!-- Uniform Layer Controls (initially hidden) -->
+      <div id="uniform-layer-scales" class="side-panel-box hidden">
+        <h4>Individual Layer Controls</h4>
+        <!-- Dynamic controls will be injected here -->
+      </div>
+      <!-- Full Model Controls (initially hidden) -->
+      <div id="full-model-controls-box" class="side-panel-box hidden">
+        <h4>Full Model Controls</h4>
+        <div class="slider-group">
+          <label for="layerSpacingSlider" class="slider-label">Layer Spacing:</label>
+          <input type="range" id="layerSpacingSlider" class="layer-slider" min="5" max="50" step="0.5" value="10">
+          <button id="resetSpacingBtn" class="slider-reset-btn">Reset</button>
+        </div>
+        <button id="resetModelBtn" class="slider-reset-btn reset-model-btn">RESET MODEL</button>
+      </div>
     </div>
 
-    <!-- Container for the main Three.js scene -->
-    <div id="threejs-container"></div>
+    <!-- Toggle Button: fixed at bottom left (its left offset is set by body state) -->
+    <button id="toggle-panel-btn" class="toggle-button">☰</button>
 
-    <!-- Side panel for dynamic canvases (if needed) -->
+    <!-- Three.js Scene Container -->
+    <div id="threejs-container"></div>
+    <!-- Side panel for dynamic canvases -->
     <div id="side-panel"></div>
+    <!-- Bottom panel (if needed) -->
     <div id="bottom-panel"></div>
   </main>
 
   <script type="module" src="/static/js/app.js"></script>
   <script type="module">
     document.addEventListener('DOMContentLoaded', () => {
-      const toggleButton = document.getElementById('toggle-panel-btn');
       const leftPanel = document.getElementById('left-side-panel');
-      if (toggleButton) {
+      const toggleButton = document.getElementById('toggle-panel-btn');
+      const body = document.body;
+      if (toggleButton && leftPanel) {
         toggleButton.addEventListener('click', () => {
-          leftPanel.classList.toggle('open'); // Toggle the panel's visibility
+          if (body.classList.contains('panel-open')) {
+            body.classList.remove('panel-open');
+            body.classList.add('panel-closed');
+            leftPanel.classList.remove('open');
+            leftPanel.classList.add('collapsed');
+          } else {
+            body.classList.remove('panel-closed');
+            body.classList.add('panel-open');
+            leftPanel.classList.remove('collapsed');
+            leftPanel.classList.add('open');
+          }
+          console.log("Body classes:", body.className);
+          console.log("Left panel classes:", leftPanel.className);
         });
       }
     });
