@@ -197,6 +197,12 @@ export class UIManager {
     if (fullModelControls) {
       fullModelControls.classList.remove('hidden');
     }
+
+    // ← NEW: generate dummy arches and wire them to the checkbox
+    this.generateDummyConnections();
+    // ensure the checkbox state controls them immediately
+    const weightedChk = document.getElementById('weightedConnectionsCheckbox');
+    this.toggleDummyConnections(weightedChk?.checked);
   }
   
   /**
@@ -420,14 +426,19 @@ export class UIManager {
    */
   initializeFullModelControls() {
     const layerSpacingSlider = document.getElementById('layerSpacingSlider');
-    const resetSpacingBtn = document.getElementById('resetSpacingBtn');
-    const resetModelBtn = document.getElementById('resetModelBtn');
+    const resetSpacingBtn    = document.getElementById('resetSpacingBtn');
+    const resetModelBtn      = document.getElementById('resetModelBtn');
+    const weightedChk        = document.getElementById('weightedConnectionsCheckbox');
+
+    // Layer Spacing slider
     if (layerSpacingSlider) {
       layerSpacingSlider.addEventListener('input', (evt) => {
         this.layerSpacing = parseFloat(evt.target.value);
         this.updateLayerSpacing();
       });
     }
+
+    // Reset Layer Spacing button
     if (resetSpacingBtn) {
       resetSpacingBtn.addEventListener('click', () => {
         this.layerSpacing = 10;
@@ -435,16 +446,38 @@ export class UIManager {
         this.updateLayerSpacing();
       });
     }
+
+    // RESET ALL button
     if (resetModelBtn) {
       resetModelBtn.addEventListener('click', () => {
+        // 1) Reset spacing
         this.layerSpacing = 10;
         if (layerSpacingSlider) layerSpacingSlider.value = '10';
         this.updateLayerSpacing();
+
+        // 2) Reset uniform scales & visibility
         for (const key in this.layerGroups) {
           this.layerGroups[key].scale.set(1, 1, 1);
-          this.layerGroups[key].traverse(child => child.visible = true);
+          this.layerGroups[key].traverse(child => {
+            child.visible = true;
+          });
         }
         this.updateUniformScaleSliders();
+
+        // 3) Reset the checkbox UI
+        if (weightedChk) {
+          weightedChk.checked = false;
+        }
+
+        // 4) Hide dummy connections
+        this.toggleDummyConnections(false);
+      });
+    }
+
+    // Weighted Connections checkbox
+    if (weightedChk) {
+      weightedChk.addEventListener('change', (e) => {
+        this.toggleDummyConnections(e.target.checked);
       });
     }
   }
@@ -458,6 +491,82 @@ export class UIManager {
       this.layerGroups[key].position.z = this.layerSpacing * layerIndex;
     }
   }
+
+  /**
+   * Generate a fixed set of dummy MAC‑to‑MAC connections (by index)
+   * and draw them as arches.
+   * Replace the `dummyPairs` array later with real data.
+   */
+  generateDummyConnections() {
+    // Example dummy pairs of indices into this.clickableMACs
+    const dummyPairs = [
+      [0, 5],
+      [2, 3],
+      [1, 4],
+      [6, 7],
+      [2, 8],
+      [9, 3],
+      [10, 11],
+      [5, 12],
+      [7, 0],
+      [4, 9]
+    ];
+
+    // Clear any existing dummy meshes
+    if (this._dummyMeshes) {
+      this._dummyMeshes.forEach(m => {
+        this.scene.remove(m);
+        m.geometry.dispose();
+        m.material.dispose();
+      });
+    }
+    this._dummyMeshes = [];
+
+    dummyPairs.forEach(([i, j]) => {
+      const macA = this.clickableMACs[i];
+      const macB = this.clickableMACs[j];
+      if (!macA || !macB) return;
+
+      // world positions
+      const posA = new THREE.Vector3();
+      const posB = new THREE.Vector3();
+      macA.getWorldPosition(posA);
+      macB.getWorldPosition(posB);
+
+      // mid‑point arch
+      const mid = posA.clone().lerp(posB, 0.5);
+      mid.z += 5; // lift arch height
+
+      // quadratic Bézier curve
+      const curve = new THREE.QuadraticBezierCurve3(posA, mid, posB);
+
+      // tube geometry
+      const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.1, 8, false);
+
+      // dummy weight color (random for now)
+      const weight = Math.random();
+      const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(1 - weight, weight, 0),
+        transparent: true,
+        opacity: 0.7
+      });
+
+      const mesh = new THREE.Mesh(tubeGeo, mat);
+      mesh.visible = false; // start hidden
+      mesh.userData.isDummyConnection = true;
+      this.scene.add(mesh);
+      this._dummyMeshes.push(mesh);
+    });
+  }
+
+  /**
+   * Toggle visibility of all dummy connections.
+   */
+  toggleDummyConnections(show) {
+    if (!this._dummyMeshes) return;
+    this._dummyMeshes.forEach(m => m.visible = show);
+  }
+
   
   onSceneClick(event) {
     const rect = this.sceneManager.renderer.domElement.getBoundingClientRect();

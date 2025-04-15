@@ -11,10 +11,9 @@
   <!-- Custom CSS -->
   <link rel="stylesheet" href="/static/css/styles.css" />
 </head>
-<body class="panel-closed">
+<body class="panel-closed-1 panel-closed-2">
   <header>
     <h1>Sparsey Visualization</h1>
-    <!-- Project and Run Selection -->
     <div class="controls">
       <label for="projectSelect">Select W&B Project:</label>
       <select id="projectSelect">
@@ -26,7 +25,6 @@
       </select>
       <button id="visualizeButton" disabled>Visualize</button>
     </div>
-    <!-- MAC Details and Reset Button -->
     <div id="mac-details-container">
       <div id="mac-details-row">
         <div id="mac-details-header">MAC Details</div>
@@ -37,20 +35,17 @@
   </header>
 
   <main>
-    <!-- Left Side Panel -->
-    <div id="left-side-panel" class="collapsed">
+    <!-- Panel 1 -->
+    <div id="left-side-panel-1" class="collapsed side-panel">
       <div id="camera-control-pane" class="side-panel-box">
         <h4 class="camera-controls-header">Camera Controls</h4>
         <button id="panButton">Pan Mode</button>
         <button id="bothButton">Default Mode</button>
         <button id="resetControls">Reset Camera</button>
       </div>
-      <!-- Uniform Layer Controls (initially hidden) -->
       <div id="uniform-layer-scales" class="side-panel-box hidden">
         <h4>Individual Layer Controls</h4>
-        <!-- Dynamic controls will be injected here -->
       </div>
-      <!-- Full Model Controls (initially hidden) -->
       <div id="full-model-controls-box" class="side-panel-box hidden">
         <h4>Full Model Controls</h4>
         <div class="slider-group">
@@ -58,42 +53,72 @@
           <input type="range" id="layerSpacingSlider" class="layer-slider" min="5" max="50" step="0.5" value="10">
           <button id="resetSpacingBtn" class="slider-reset-btn">Reset</button>
         </div>
+        <div class="slider-group">
+          <input type="checkbox" id="weightedConnectionsCheckbox" />
+          <label for="weightedConnectionsCheckbox" class="slider-label">
+            Show Weighted Connections
+          </label>
+        </div>
         <button id="resetModelBtn" class="slider-reset-btn reset-model-btn">RESET ALL</button>
       </div>
     </div>
+    <button id="toggle-panel-btn-1" class="toggle-button">☰</button>
 
-    <!-- Toggle Button: fixed at bottom left (its left offset is set by body state) -->
-    <button id="toggle-panel-btn" class="toggle-button">☰</button>
+    <!-- Panel 2 -->
+    <div id="left-side-panel-2" class="collapsed side-panel">
+      <div class="side-panel-box">
+        <h4>Choose an Input</h4>
+        <select id="inputSelect" size="20">
+          <!-- JS will inject <option>1 … 100</option> here -->
+        </select>
+      </div>
+    </div>
+    <button id="toggle-panel-btn-2" class="toggle-button">≡</button>
 
     <!-- Three.js Scene Container -->
     <div id="threejs-container"></div>
-    <!-- Side panel for dynamic canvases -->
     <div id="side-panel"></div>
-    <!-- Bottom panel (if needed) -->
     <div id="bottom-panel"></div>
   </main>
 
   <script type="module" src="/static/js/app.js"></script>
-  <script type="module">
+  <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const leftPanel = document.getElementById('left-side-panel');
-      const toggleButton = document.getElementById('toggle-panel-btn');
       const body = document.body;
-      if (toggleButton && leftPanel) {
-        toggleButton.addEventListener('click', () => {
-          if (body.classList.contains('panel-open')) {
-            body.classList.remove('panel-open');
-            body.classList.add('panel-closed');
-            leftPanel.classList.remove('open');
-            leftPanel.classList.add('collapsed');
-          } else {
-            body.classList.remove('panel-closed');
-            body.classList.add('panel-open');
-            leftPanel.classList.remove('collapsed');
-            leftPanel.classList.add('open');
-          }
-          console.log("Body classes:", body.className);
-          console.log("Left panel classes:", leftPanel.className);
+
+      // Panel 1 toggle
+      const panel1 = document.getElementById('left-side-panel-1');
+      document.getElementById('toggle-panel-btn-1').addEventListener('click', () => {
+        const open = panel1.classList.toggle('open');
+        panel1.classList.toggle('collapsed', !open);
+        body.classList.toggle('panel-open-1', open);
+        body.classList.toggle('panel-closed-1', !open);
+      });
+
+      // Panel 2 toggle
+      const panel2 = document.getElementById('left-side-panel-2');
+      document.getElementById('toggle-panel-btn-2').addEventListener('click', () => {
+        const open = panel2.classList.toggle('open');
+        panel2.classList.toggle('collapsed', !open);
+        body.classList.toggle('panel-open-2', open);
+        body.classList.toggle('panel-closed-2', !open);
+      });
+
+      // === NEW: populate the inputSelect ===
+      const inputSelect = document.getElementById('inputSelect');
+      if (inputSelect) {
+        // Create 100 dummy inputs
+        for (let i = 1; i <= 100; i++) {
+          const opt = document.createElement('option');
+          opt.value = i;
+          opt.textContent = `Input ${i}`;
+          inputSelect.appendChild(opt);
+        }
+
+        // (Optional) handle selection events
+        inputSelect.addEventListener('change', (e) => {
+          console.log('User selected input ID:', e.target.value);
+          // TODO: wire up behavior when you have real inputs
         });
       }
     });

@@ -101,52 +101,82 @@ main {
   margin-top: 3px;
 }
 
-/* Body state classes: toggle button's transform is set based on state */
-body.panel-closed #toggle-panel-btn {
-  transform: translateX(0);
-  transition-delay: 0s;
-}
-body.panel-open #toggle-panel-btn {
-  transform: translateX(320px);
-  transition-delay: 0.02s; /* Delay added so the toggle button moves slightly later */
-}
-
-/* Toggle button – fixed at bottom with a smooth transform transition */
-#toggle-panel-btn {
+/* Toggle buttons – fixed at bottom with a smooth transform transition */
+.toggle-button {
   position: fixed;
-  bottom: 30px;
-  /* transform is controlled by body state */
   background-color: #333;
   color: white;
   border: none;
   padding: 10px 15px;
   cursor: pointer;
   font-size: 18px;
-  z-index: 1100;
+  z-index: 1000;
   transition: transform 0.3s ease-in-out;
 }
 
-/* Left Side Panel – fixed on the left, slides in/out */
-#left-side-panel {
-  position: fixed;
+/* Make both toggle buttons the same size */
+.toggle-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;           /* remove the old padding */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Optionally bump font-size so the icon fills the button */
+.toggle-button {
+  font-size: 24px;
+  line-height: 1;
+}
+
+/* Panel 1 toggle button (bottom) */
+#toggle-panel-btn-1 {
+  bottom: 30px;
   left: 0;
+}
+/* Panel 2 toggle button (stacked above Panel 1) */
+#toggle-panel-btn-2 {
+  bottom: 80px;
+  left: 0;
+}
+
+/* Body state classes: move each toggle button when its panel is open */
+body.panel-open-1 #toggle-panel-btn-1 {
+  transform: translateX(300px);
+}
+body.panel-open-2 #toggle-panel-btn-2 {
+  transform: translateX(300px);
+}
+
+/* Left Side Panels – both start collapsed (off-screen) */
+.side-panel {
+  position: fixed;
   top: 90px; /* below header */
-  width: 300px;
+  width: 280px;
   height: calc(100vh - 90px);
   background-color: #333;
   color: white;
   transition: transform 0.3s ease-in-out;
-  /* Initially collapsed: move off-screen by 320px */
-  transform: translateX(-320px);
+  transform: translateX(-300px);
+  overflow-y: auto;
+  padding: 10px;
+  box-sizing: border-box;
+  z-index: 1100;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 10px;
-  overflow-y: auto;
-  z-index: 1050;
 }
-#left-side-panel.open {
+.side-panel.open {
   transform: translateX(0) !important;
+}
+
+/* Position Panel 1 at left:0, Panel 2 offset */
+#left-side-panel-1 {
+  left: 0;
+}
+#left-side-panel-2 {
+  left: 0;
 }
 
 /* Shared box style for side panel boxes */
@@ -160,6 +190,13 @@ body.panel-open #toggle-panel-btn {
   box-sizing: border-box;
   text-align: center;
   margin-bottom: 10px;
+}
+
+/* Make the select full-width and scrollable */
+#inputSelect {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 0.9em;
 }
 
 /* Camera control pane styling */
@@ -271,4 +308,24 @@ body.panel-open #toggle-panel-btn {
 .bar-graph-canvas {
   border: 1px solid #ccc;
   margin-top: 5px;
+}
+/* Style the “Choose an Input” header in Panel 2 */
+#left-side-panel-2 h4 {
+  color: black;
+  font-style: italic;
+  margin: 0 0 10px; /* optional spacing */
+}
+/* Standalone RESET ALL button styling */
+.reset-model-btn {
+  margin: 10px 0;
+  cursor: pointer;
+  background-color: #ccc;
+  color: black;
+  border: 2px solid #888;
+  border-radius: 5px;
+  padding: 8px;
+  width: calc(100% - 20px); /* account for panel padding */
+  box-sizing: border-box;
+  font-weight: bold;
+  text-align: center;
 }
