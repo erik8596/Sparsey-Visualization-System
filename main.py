@@ -9,6 +9,5 @@ def main():
         debug=environ.get('FLASK_DEBUG', True)
     )
 
-
 if __name__ == "__main__":
     main()

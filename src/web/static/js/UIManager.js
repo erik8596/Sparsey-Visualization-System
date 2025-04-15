@@ -1,5 +1,8 @@
 // File: /static/js/UIManager.js
 import { eventBus } from './app.js';
+import { MacVisualFactory } from './factories/MacVisualFactory.js';
+import { CmVisualFactory } from './factories/CmVisualFactory.js';
+import { NeuronVisualFactory } from './factories/NeuronVisualFactory.js';
 
 export class UIManager {
   constructor(sceneManager) {
@@ -27,6 +30,11 @@ export class UIManager {
 
     this.clickableMACs = [];
     this.selectedMACs = [];
+
+    // Instantiate the visual factories.
+    this.macFactory    = new MacVisualFactory();
+    this.cmFactory     = new CmVisualFactory();
+    this.neuronFactory = new NeuronVisualFactory();
 
     // Subscribe to events.
     eventBus.subscribe('sceneClicked', (event) => this.onSceneClick(event));
@@ -84,51 +92,12 @@ export class UIManager {
     this.zToIndexMap = zToIndexMap;
     console.log("[DEBUG] zToIndexMap:", zToIndexMap);
   
-    // Build MAC composites.
+    // Build MAC composites using the MacVisualFactory.
     layers.forEach(element => {
       if (element.type === 'mac') {
-        const macGroup = new THREE.Group();
-        const shape = new THREE.Shape();
-        this.drawHexagon(shape, 2.0);
-        const fillGeometry = new THREE.ShapeGeometry(shape);
-        const isActive = (element.active === true || element.active === 1);
-        const fillColor = isActive ? new THREE.Color(1.0, 0, 0) : new THREE.Color(0xcccccc);
-        const fillOpacity = isActive ? 0.8 : 0.2;
-        const fillMaterial = new THREE.MeshBasicMaterial({
-          color: fillColor,
-          transparent: true,
-          opacity: fillOpacity,
-          side: THREE.DoubleSide
-        });
-        const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
-        fillMesh.userData.isMacVisual = true;
-        fillMesh.position.z = -0.01;
-        macGroup.add(fillMesh);
-  
-        // Create outline.
-        const points = shape.getPoints();
-        const outlineGeometry = new THREE.BufferGeometry().setFromPoints(points);
-        const outlineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
-        const outlineLine = new THREE.LineLoop(outlineGeometry, outlineMaterial);
-        outlineLine.userData = { type: 'mac_outline', isMacVisual: true };
-        macGroup.add(outlineLine);
-  
-        // Set metadata.
-        macGroup.userData = Object.assign({}, element);
-        macGroup.userData.outlineLine = outlineLine;
-        macGroup.userData.fillMesh = fillMesh;
-        macGroup.userData.originalZ = element.z;
-        macGroup.userData.type = 'mac';
-        macGroup.userData.layerIndex = zToIndexMap[element.z] || 0;
-        macGroup.userData.isMACGroup = true;
-  
-        // Position relative to layer centroid.
-        const thisZ = element.z;
-        macGroup.position.set(
-          element.x - layerCenters[thisZ].x,
-          (element.y - layerCenters[thisZ].y) * mac_spacing,
-          0
-        );
+        const layerCenter = layerCenters[element.z];
+        const layerIndex  = zToIndexMap[element.z] || 0;
+        const macGroup    = this.macFactory.create(element, layerCenter, mac_spacing, layerIndex);
   
         // Create or add to layer group.
         if (!this.layerGroups[element.z]) {
@@ -142,70 +111,21 @@ export class UIManager {
       }
     });
   
-    // Build CM and neuron objects.
+    // Build CM objects using the CmVisualFactory.
     layers.forEach(element => {
-      if (element.type === 'cm' || element.type === 'neuron') {
-        let object;
-        if (element.type === 'cm') {
-          const shape = new THREE.Shape();
-          this.drawCircle(shape, 0.4); 
-          const points = shape.getPoints();
-          const geometry = new THREE.BufferGeometry().setFromPoints(points);
-          const material = new THREE.LineBasicMaterial({ color: 0x0000FF, linewidth: 2 });
-          object = new THREE.LineLoop(geometry, material);
-        } else if (element.type === 'neuron') {
-          const shape = new THREE.Shape();
-          this.drawCircle(shape, 0.10);
-          if (element.active) {
-            const fillGeometry = new THREE.ShapeGeometry(shape);
-            const intensity = element.raw_activation || 0;
-            const color = new THREE.Color(0, intensity, 0);
-            const fillMaterial = new THREE.MeshBasicMaterial({
-              color: color,
-              side: THREE.DoubleSide,
-              transparent: true,
-              opacity: 0.8,
-              depthTest: false
-            });
-            object = new THREE.Mesh(fillGeometry, fillMaterial);
-            object.position.z += 0.2;
-            object.renderOrder = 10;
-          } else {
-            const points = shape.getPoints();
-            const geometry = new THREE.BufferGeometry().setFromPoints(points);
-            const material = new THREE.LineBasicMaterial({
-              color: 0x000000,
-              linewidth: 1,
-              transparent: true,
-              opacity: 0.2
-            });
-            object = new THREE.LineLoop(geometry, material);
-          }
-          if (element.raw_activation !== undefined) {
-            object.userData.raw_activation = element.raw_activation;
-          }
-          if (element.avg_activation !== undefined) {
-            object.userData.avg_activation = element.avg_activation;
-          }
-        }
-        object.userData = Object.assign({}, element);
-        object.userData.type = element.type;
-        const thisZ = element.z;
-        object.userData.layerIndex = zToIndexMap[thisZ] || 0;
-  
-        object.position.set(
-          element.x - layerCenters[thisZ].x,
-          (element.y - layerCenters[thisZ].y) * mac_spacing,
-          0
-        );
+      if (element.type === 'cm') {
+        const layerCenter = layerCenters[element.z];
+        const obj = this.cmFactory.create(element, layerCenter, mac_spacing);
+        obj.userData.layerIndex = zToIndexMap[element.z] || 0;
   
         // Attach to nearest MAC if available.
+        const thisZ = element.z;
         let closestMac = null;
         let minDistance = Infinity;
         this.layerGroups[thisZ].traverse(child => {
           if (child.userData && child.userData.type === 'mac') {
-            const dx = child.position.x - object.position.x;
-            const dy = child.position.y - object.position.y;
+            const dx = child.position.x - obj.position.x;
+            const dy = child.position.y - obj.position.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < minDistance) {
               minDistance = dist;
@@ -214,10 +134,41 @@ export class UIManager {
           }
         });
         if (closestMac) {
-          object.position.sub(closestMac.position);
-          closestMac.add(object);
+          obj.position.sub(closestMac.position);
+          closestMac.add(obj);
         } else {
-          this.layerGroups[thisZ].add(object);
+          this.layerGroups[thisZ].add(obj);
+        }
+      }
+    });
+  
+    // Build Neuron objects using the NeuronVisualFactory.
+    layers.forEach(element => {
+      if (element.type === 'neuron') {
+        const layerCenter = layerCenters[element.z];
+        const obj = this.neuronFactory.create(element, layerCenter, mac_spacing);
+        obj.userData.layerIndex = zToIndexMap[element.z] || 0;
+  
+        // Attach to nearest MAC if available.
+        const thisZ = element.z;
+        let closestMac = null;
+        let minDistance = Infinity;
+        this.layerGroups[thisZ].traverse(child => {
+          if (child.userData && child.userData.type === 'mac') {
+            const dx = child.position.x - obj.position.x;
+            const dy = child.position.y - obj.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < minDistance) {
+              minDistance = dist;
+              closestMac = child;
+            }
+          }
+        });
+        if (closestMac) {
+          obj.position.sub(closestMac.position);
+          closestMac.add(obj);
+        } else {
+          this.layerGroups[thisZ].add(obj);
         }
       }
     });
@@ -744,6 +695,13 @@ export class UIManager {
   }
   
   updateProjectDropdown(projects) {
+    console.log('🔍 updateProjectDropdown called, projects =', projects);
+    console.log('🔍 this.projectSelect =', this.projectSelect);
+
+    if (!this.projectSelect) {
+      console.error('❌ projectSelect element not found!');
+      return;
+    }
     this.projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
     projects.forEach(project => {
       const option = document.createElement('option');
@@ -820,21 +778,6 @@ export class UIManager {
       let angle = (Math.PI / 3) * i;
       let x = size * Math.cos(angle);
       let y = size * Math.sin(angle);
-      if (i === 0) {
-        shape.moveTo(x, y);
-      } else {
-        shape.lineTo(x, y);
-      }
-    }
-    shape.closePath();
-  }
-  
-  drawCircle(shape, radius) {
-    const numSegments = 20;
-    for (let i = 0; i < numSegments; i++) {
-      let angle = (Math.PI * 2 / numSegments) * i;
-      let x = radius * Math.cos(angle);
-      let y = radius * Math.sin(angle);
       if (i === 0) {
         shape.moveTo(x, y);
       } else {
