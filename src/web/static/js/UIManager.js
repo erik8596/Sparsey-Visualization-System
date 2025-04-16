@@ -31,9 +31,10 @@ export class UIManager {
     this.clickableMACs = [];
     this.selectedMACs = [];
 
-    // Arrays to track all neurons + the dummy neuron connections
-    this.allNeurons = [];    
-    this._dummyNeuronConnections = [];
+    // Arrays to track all neurons + the neuron connections
+    this.allNeurons = [];
+    this._dummyNeuronConnections = [];   // (Random mock connections)
+    this._connectionRefCounts = new Map(); // Key: connection object, Value: reference count
 
     // Instantiate the visual factories.
     this.macFactory    = new MacVisualFactory();
@@ -63,6 +64,7 @@ export class UIManager {
     this.inputGridGroup= null;
     this.allNeurons    = [];  // Reset the neuron list
     this._dummyNeuronConnections = []; // Clear old connections
+    this._connectionRefCounts = new Map(); // Clear reference counts
 
     const mac_spacing = 1.33;
   
@@ -152,7 +154,7 @@ export class UIManager {
         const obj = this.neuronFactory.create(element, layerCenter, mac_spacing);
         obj.userData.layerIndex = zToIndexMap[element.z] || 0;
 
-        // Keep track of all neurons in an array
+        // Keep track of all neurons
         this.allNeurons.push(obj);
   
         // Attach to nearest MAC if available
@@ -174,7 +176,7 @@ export class UIManager {
           obj.position.sub(closestMac.position);
           closestMac.add(obj);
         } else {
-          // Otherwise, add it directly to the layer group
+          // Otherwise, add directly to the layer group
           this.layerGroups[thisZ].add(obj);
         }
       }
@@ -201,13 +203,11 @@ export class UIManager {
     if (uniformControls)   uniformControls.classList.remove('hidden');
     if (fullModelControls) fullModelControls.classList.remove('hidden');
 
-    // Generate *neuron* connections (instead of MAC->MAC)
-    // Let's do 50 random neuron-neuron connections for testing
-    this.generateDummyNeuronConnections(50);
+    // Generate random *neuron* connections (instead of MAC->MAC)
+    this.generateDummyNeuronConnections(200);
 
-    // Tie them to the Weighted Connections checkbox
-    const weightedChk = document.getElementById('weightedConnectionsCheckbox');
-    this.toggleDummyNeuronConnections(weightedChk?.checked);
+    // Initially refresh connection visibility (global + no MAC toggles yet)
+    this.refreshConnectionVisibility();
   }
   
   /**
@@ -233,7 +233,7 @@ export class UIManager {
         this.drawHexagon(shape, hexSize);
         const fillGeometry = new THREE.ShapeGeometry(shape);
         const fillMaterial = new THREE.MeshBasicMaterial({
-          color: 0xffcccc,
+          color: 0x000000,
           transparent: true,
           opacity: isActive ? 1.0 : 0.0,
           side: THREE.DoubleSide
@@ -257,11 +257,11 @@ export class UIManager {
   }
 
   /**
-   * Generate random neuron–neuron connections.
-   * If same layer => an arc (tube). Otherwise => line.
+   * Generate random neuron–neuron connections for demonstration.
+   * If same layer => an arc (tube). Otherwise => a straight line.
    */
-  generateDummyNeuronConnections(numConnections = 50) {
-    // Clear old neuron connections if any
+  generateDummyNeuronConnections(numConnections = 200) {
+    // Clear existing connections
     if (this._dummyNeuronConnections) {
       this._dummyNeuronConnections.forEach(conn => {
         this.scene.remove(conn.mesh);
@@ -270,40 +270,42 @@ export class UIManager {
       });
     }
     this._dummyNeuronConnections = [];
+    this._connectionRefCounts = new Map(); // reset reference counts
 
     const n = this.allNeurons.length;
     if (n < 2) return;
 
     for (let i = 0; i < numConnections; i++) {
-      // Pick random pair of distinct neurons
+      // Pick a random pair of distinct neurons
       const idxA = Math.floor(Math.random() * n);
       const idxB = Math.floor(Math.random() * n);
       if (idxA === idxB) continue;
 
       const neuronA = this.allNeurons[idxA];
       const neuronB = this.allNeurons[idxB];
+      const weight = Math.random(); // random weight for demonstration
 
-      // For now, pick a random weight
-      const weight = Math.random();
-
-      // Create mesh (arc or line, with color)
+      // Create the mesh (arc or line)
       const mesh = this.createNeuronConnectionMesh(neuronA, neuronB, weight);
-
-      mesh.visible = false; // Start hidden
+      // Start hidden (we'll control visibility via refreshConnectionVisibility)
+      mesh.visible = false;
       mesh.userData.isNeuronConnection = true;
 
       this.scene.add(mesh);
-      this._dummyNeuronConnections.push({ neuronA, neuronB, mesh, weight });
+      const conn = { neuronA, neuronB, mesh, weight };
+      this._dummyNeuronConnections.push(conn);
+
+      // Initialize refCount to 0
+      this._connectionRefCounts.set(conn, 0);
     }
   }
 
   /**
-   * If same layer => arc (tube).
-   * Otherwise => line.
-   * Also color them:
-   *  - bottom-up (layerA < layerB) => blue
-   *  - top-down   (layerA > layerB) => magenta
-   *  - same layer => green
+   * Creates either an arc (TubeGeometry) for same-layer or a line for cross-layer.
+   * Also colors them by direction:
+   *   - bottom-up (layerA < layerB) => blue
+   *   - top-down  (layerA > layerB) => magenta
+   *   - same layer => green
    */
   createNeuronConnectionMesh(neuronA, neuronB, weight) {
     const posA = new THREE.Vector3();
@@ -326,25 +328,15 @@ export class UIManager {
       color = new THREE.Color("#00FF00");
     }
 
-    // If same layer => we do an arc (TubeGeometry)
+    // If same layer => tube arc; otherwise => line
     if (layerA === layerB) {
       const mid = posA.clone().lerp(posB, 0.5);
-      mid.z += 5; // "lift" for the arch
+      mid.z += 5; // "lift" for the arc
       const curve = new THREE.QuadraticBezierCurve3(posA, mid, posB);
-
-      // Tube geometry
       const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.03, 8, false);
-
-      // Material
-      const mat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.7
-      });
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7 });
       return new THREE.Mesh(tubeGeo, mat);
-
     } else {
-      // Different layers => just a line
       const points = [posA, posB];
       const geometry = new THREE.BufferGeometry().setFromPoints(points);
       const material = new THREE.LineBasicMaterial({ color });
@@ -354,7 +346,7 @@ export class UIManager {
 
   /**
    * Recompute geometry for each neuron–neuron connection (arc or line)
-   * in case neuron positions changed due to scaling or spacing.
+   * in case neuron positions changed (due to scaling or spacing).
    */
   updateDummyNeuronConnections() {
     if (!this._dummyNeuronConnections) return;
@@ -385,13 +377,65 @@ export class UIManager {
   }
 
   /**
-   * Toggle visibility of neuron–neuron connections.
+   * Single final source of truth:
+   * Show connection if (global "Show All Weighted" is on) OR (refCount > 0).
    */
-  toggleDummyNeuronConnections(show) {
+  refreshConnectionVisibility() {
+    // Global "Show All Weighted" checkbox
+    const weightedChk = document.getElementById('weightedConnectionsCheckbox');
+    const globalShowAll = (weightedChk && weightedChk.checked);
+
     if (!this._dummyNeuronConnections) return;
-    this._dummyNeuronConnections.forEach(conn => {
-      conn.mesh.visible = show;
+
+    for (const conn of this._dummyNeuronConnections) {
+      const refCount = this._connectionRefCounts.get(conn) || 0;
+      // If global is on => always visible, else visible if refCount > 0
+      conn.mesh.visible = globalShowAll || (refCount > 0);
+    }
+  }
+
+  /**
+   * Helper: find all neurons inside a particular MAC group.
+   */
+  getNeuronsInMAC(macGroup) {
+    const neurons = [];
+    macGroup.traverse(obj => {
+      if (obj.userData && obj.userData.type === 'neuron') {
+        neurons.push(obj);
+      }
     });
+    return neurons;
+  }
+
+  /**
+   * Increment refCount for all connections belonging to neurons in this MAC.
+   */
+  incrementConnectionRefCountForMac(macGroup) {
+    const macNeurons = this.getNeuronsInMAC(macGroup);
+    for (const conn of this._dummyNeuronConnections) {
+      const neuronA = conn.neuronA;
+      const neuronB = conn.neuronB;
+      if (macNeurons.includes(neuronA) || macNeurons.includes(neuronB)) {
+        const current = this._connectionRefCounts.get(conn) || 0;
+        this._connectionRefCounts.set(conn, current + 1);
+      }
+    }
+  }
+
+  /**
+   * Decrement refCount for all connections belonging to neurons in this MAC.
+   */
+  decrementConnectionRefCountForMac(macGroup) {
+    const macNeurons = this.getNeuronsInMAC(macGroup);
+    for (const conn of this._dummyNeuronConnections) {
+      const neuronA = conn.neuronA;
+      const neuronB = conn.neuronB;
+      if (macNeurons.includes(neuronA) || macNeurons.includes(neuronB)) {
+        const current = this._connectionRefCounts.get(conn) || 0;
+        const newVal = Math.max(current - 1, 0);
+        this._connectionRefCounts.set(conn, newVal);
+      }
+    }
   }
 
   /**
@@ -448,8 +492,10 @@ export class UIManager {
         const scaleVal = parseFloat(evt.target.value);
         this.layerGroups[key].scale.set(scaleVal, scaleVal, scaleVal);
 
-        // Recompute neuron lines/arches
+        // Recompute connections
         this.updateDummyNeuronConnections();
+        // Refresh final visibility if needed
+        this.refreshConnectionVisibility();
       });
       sliderRow.appendChild(slider);
 
@@ -462,6 +508,7 @@ export class UIManager {
 
         // "Snap" them back
         this.updateDummyNeuronConnections();
+        this.refreshConnectionVisibility();
       });
       sliderRow.appendChild(resetBtn);
       layerContainer.appendChild(sliderRow);
@@ -595,6 +642,7 @@ export class UIManager {
     }
 
     // RESET ALL button
+    // Inside initializeFullModelControls() or wherever resetModelBtn is defined:
     if (resetModelBtn) {
       resetModelBtn.addEventListener('click', () => {
         // 1) Reset spacing
@@ -602,32 +650,58 @@ export class UIManager {
         if (layerSpacingSlider) layerSpacingSlider.value = '10';
         this.updateLayerSpacing();
       
-        // 2) Reset uniform scales & visibility
+        // 2) Reset uniform scales & forcibly set all children visible
+        //    Also re-add MACs to this.clickableMACs (so we can click them again)
+        this.clickableMACs = []; // Clear the old array
         for (const key in this.layerGroups) {
+          // Reset scale
           this.layerGroups[key].scale.set(1, 1, 1);
+
+          // Traverse, show everything, and re-add any MACs
           this.layerGroups[key].traverse(child => {
             child.visible = true;
+            if (child.userData && child.userData.type === 'mac') {
+              // Re-add to clickableMACs if not present
+              if (!this.clickableMACs.includes(child)) {
+                this.clickableMACs.push(child);
+              }
+            }
           });
         }
-        this.updateUniformScaleSliders();
-      
-        // 3) Reset Weighted Connections checkbox
+
+        // 3) Re-check the layer toggles in the UI so the user sees that MACs are visible
+        const uniformControls = document.getElementById('uniform-layer-scales');
+        if (uniformControls) {
+          // For each layer's MAC/CM/Neuron checkbox, set them to true
+          const macCheckboxes = uniformControls.querySelectorAll('input[id^="toggle-mac-"]');
+          macCheckboxes.forEach(cb => { cb.checked = true; });
+
+          const cmCheckboxes = uniformControls.querySelectorAll('input[id^="toggle-cm-"]');
+          cmCheckboxes.forEach(cb => { cb.checked = true; });
+
+          const neuronCheckboxes = uniformControls.querySelectorAll('input[id^="toggle-neuron-"]');
+          neuronCheckboxes.forEach(cb => { cb.checked = true; });
+        }
+
+        // 4) Reset Weighted Connections checkbox
         if (weightedChk) {
           weightedChk.checked = false;
         }
-      
-        // 4) Hide the connections
-        this.toggleDummyNeuronConnections(false);
-      
-        // *** 5) IMPORTANT: Recompute the connections so geometry matches the new scale/position
-        this.updateDummyNeuronConnections(); // or updateDummyConnections() if using MAC arcs
+
+        // 5) Recompute connections so geometry matches the new scale/position
+        this.updateDummyNeuronConnections();
+
+        // 6) Refresh final visibility
+        this.refreshConnectionVisibility();
       });
     }
 
+
     // Weighted Connections checkbox
     if (weightedChk) {
-      weightedChk.addEventListener('change', (e) => {
-        this.toggleDummyNeuronConnections(e.target.checked);
+      weightedChk.addEventListener('change', () => {
+        // Just re-check the final rule:
+        this.refreshConnectionVisibility();
       });
     }
   }
@@ -641,11 +715,13 @@ export class UIManager {
       this.layerGroups[key].position.z = this.layerSpacing * layerIndex;
     }
 
-    // Recompute neuron lines/arches so they "snap" to new positions
+    // Recompute arcs/lines
     this.updateDummyNeuronConnections();
+    // Then apply final visibility logic
+    this.refreshConnectionVisibility();
   }
 
-  // ---------- MAC Click Handling (unchanged) -----------------
+  // ---------- MAC Click Handling -----------------
 
   onSceneClick(event) {
     const rect = this.sceneManager.renderer.domElement.getBoundingClientRect();
@@ -676,31 +752,52 @@ export class UIManager {
   
   toggleMACSelection(macGroup) {
     const outlineLine = macGroup.userData.outlineLine;
+  
     function disableRaycast(obj) {
       obj.raycast = () => {};
       if (obj.children) {
         obj.children.forEach(child => disableRaycast(child));
       }
     }
+  
+    // If it's already selected, we're toggling it OFF
     if (macGroup.userData.isSelected) {
+      // Remove green "innerOutline" overlay
       if (macGroup.userData.innerOutline) {
         macGroup.remove(macGroup.userData.innerOutline);
         macGroup.userData.innerOutline = null;
       }
       macGroup.userData.isSelected = false;
+  
+      // Hide side-panel canvas if any
       if (macGroup.userData.canvasWrapper) {
         macGroup.userData.canvasWrapper.style.display = 'none';
       }
+  
+      // Remove from selectedMACs array
       const idx = this.selectedMACs.indexOf(macGroup);
       if (idx !== -1) {
         this.selectedMACs.splice(idx, 1);
       }
+  
+      // **Revert outline to its original color** (instead of black)
+      if (outlineLine && outlineLine.userData && outlineLine.userData.originalOutlineColor != null) {
+        outlineLine.material.color.set(outlineLine.userData.originalOutlineColor);
+      }
+  
+      // Decrement connection refCounts for neurons in this MAC
+      this.decrementConnectionRefCountForMac(macGroup);
+      this.refreshConnectionVisibility();
+  
     } else {
+      // Toggling MAC ON
       if (!macGroup.userData.canvasWrapper) {
         macGroup.userData.canvasWrapper = this.createMACCanvas(macGroup);
       } else {
         macGroup.userData.canvasWrapper.style.display = 'block';
       }
+  
+      // Create green "innerOutline" overlay
       const innerOutlineGeometry = outlineLine.geometry.clone();
       const innerOutlineMaterial = new THREE.LineBasicMaterial({ color: 0x08FF08, linewidth: 1 });
       const innerOutline = new THREE.LineLoop(innerOutlineGeometry, innerOutlineMaterial);
@@ -708,10 +805,17 @@ export class UIManager {
       disableRaycast(innerOutline);
       macGroup.add(innerOutline);
       macGroup.userData.innerOutline = innerOutline;
+  
+      // Mark as selected
       macGroup.userData.isSelected = true;
       this.selectedMACs.push(macGroup);
-    }
   
+      // Increment connection refCounts for neurons in this MAC
+      this.incrementConnectionRefCountForMac(macGroup);
+      this.refreshConnectionVisibility();
+    }
+    
+    // Update MAC details display
     const layerIndex = macGroup.userData.layerIndex;
     const detailsDiv = document.getElementById('mac-details');
     if (detailsDiv) {
@@ -720,26 +824,48 @@ export class UIManager {
   }
   
   resetToggledMACs() {
+    // Turn off all selected MACs
     this.selectedMACs.forEach(macGroup => {
       if (macGroup.userData.isSelected) {
-        macGroup.userData.outlineLine.material.color.set(0x000000);
         macGroup.userData.isSelected = false;
+  
+        // Remove the green "innerOutline" highlight
         if (macGroup.userData.innerOutline) {
           macGroup.remove(macGroup.userData.innerOutline);
           macGroup.userData.innerOutline = null;
         }
+  
+        // Revert the MAC's base outline to its original color (red or blue)
+        const outlineLine = macGroup.userData.outlineLine;
+        if (outlineLine && outlineLine.userData && outlineLine.userData.originalOutlineColor) {
+          outlineLine.material.color.set(outlineLine.userData.originalOutlineColor);
+        }
       }
     });
+  
+    // Clear the selectedMACs array
     this.selectedMACs = [];
+  
+    // Clear MAC details
     const detailsDiv = document.getElementById("mac-details");
     if (detailsDiv) {
       detailsDiv.innerHTML = `<p><strong>Layer:</strong></p>`;
     }
     this.clearSidePanel();
+    
+    // Remove references to the canvas
     this.clickableMACs.forEach(macGroup => {
       macGroup.userData.canvasWrapper = null;
     });
-  }
+  
+    // Also reset all connection refcounts to 0
+    for (const conn of this._dummyNeuronConnections) {
+      this._connectionRefCounts.set(conn, 0);
+    }
+  
+    // Then finalize visibility
+    this.refreshConnectionVisibility();
+  }  
 
   // ---------- MAC Canvas/Bar Graph stuff (unchanged) -----------------
 
@@ -835,7 +961,7 @@ export class UIManager {
   renderBarGraph(macGroup, canvas) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Just a dummy bar graph
+    // Dummy bar graph
     const sampleData = Array.from({ length: 40 }, () => Math.random());
     const fixedBarWidth = 10;
     const gap = 8;

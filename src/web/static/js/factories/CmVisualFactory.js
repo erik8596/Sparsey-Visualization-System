@@ -16,7 +16,7 @@ export class CmVisualFactory extends VisualFactory {
     shape.closePath();
 
     const geom = new THREE.BufferGeometry().setFromPoints(shape.getPoints());
-    const mat  = new THREE.LineBasicMaterial({ color: 0x0000FF, linewidth: 2 });
+    const mat  = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
     const loop = new THREE.LineLoop(geom, mat);
 
     Object.assign(loop.userData, element, { type: 'cm' });
