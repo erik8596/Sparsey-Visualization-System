@@ -13,14 +13,14 @@ export class UIManager {
     this.sharedTopRenderer = sceneManager.sharedTopRenderer;
     
     // Get elements defined in index.html.
-    this.projectSelect = document.getElementById('projectSelect');
-    this.runSelect = document.getElementById('runSelect');
-    this.visualizeButton = document.getElementById('visualizeButton');
+    this.projectSelect       = document.getElementById('projectSelect');
+    this.runSelect           = document.getElementById('runSelect');
+    this.visualizeButton     = document.getElementById('visualizeButton');
     this.macDetailsContainer = document.getElementById('mac-details-container');
-    this.macDetailsMsg = document.getElementById('mac-details-msg');
-    this.resetButton = document.getElementById('resetButton');
-    this.sidePanelContainer = document.getElementById('side-panel');
-    this.bottomPanelContainer = document.getElementById('bottom-panel');
+    this.macDetailsMsg       = document.getElementById('mac-details-msg');
+    this.resetButton         = document.getElementById('resetButton');
+    this.sidePanelContainer  = document.getElementById('side-panel');
+    this.bottomPanelContainer= document.getElementById('bottom-panel');
 
     // Group objects for each layer.
     this.layerGroups = {};
@@ -31,6 +31,10 @@ export class UIManager {
     this.clickableMACs = [];
     this.selectedMACs = [];
 
+    // Arrays to track all neurons + the dummy neuron connections
+    this.allNeurons = [];    
+    this._dummyNeuronConnections = [];
+
     // Instantiate the visual factories.
     this.macFactory    = new MacVisualFactory();
     this.cmFactory     = new CmVisualFactory();
@@ -38,7 +42,7 @@ export class UIManager {
 
     // Subscribe to events.
     eventBus.subscribe('sceneClicked', (event) => this.onSceneClick(event));
-    eventBus.subscribe('resetMACs', () => this.resetToggledMACs());
+    eventBus.subscribe('resetMACs',   () => this.resetToggledMACs());
 
     // Initialize static Full Model Controls.
     this.initializeFullModelControls();
@@ -48,18 +52,21 @@ export class UIManager {
    * Builds all layers from provided data.
    */
   buildFromLayers(layers, inputDims = null, inputActivations = null) {
-    // Remove old objects.
+    // Remove old objects in the scene.
     while (this.scene.children.length > 0) {
       this.scene.remove(this.scene.children[0]);
     }
+
     this.clickableMACs = [];
-    this.selectedMACs = [];
-    this.layerGroups = {};
-    this.inputGridGroup = null;
-  
+    this.selectedMACs  = [];
+    this.layerGroups   = {};
+    this.inputGridGroup= null;
+    this.allNeurons    = [];  // Reset the neuron list
+    this._dummyNeuronConnections = []; // Clear old connections
+
     const mac_spacing = 1.33;
   
-    // Compute centroids per layer.
+    // Group elements by layer and compute centers
     const layerGroupsObj = {};
     layers.forEach(element => {
       const layer = element.z;
@@ -79,10 +86,7 @@ export class UIManager {
       layerCenters[layer] = { x: sumX / elements.length, y: sumY / elements.length };
     });
   
-    console.log("[DEBUG] Layers' z-values:", layers.map(el => el.z));
-    console.log("[DEBUG] inputGridKey is:", this.inputGridKey);
-  
-    // Build mapping for layer spacing.
+    // Build mapping for layer spacing
     const zToIndexMap = {};
     zToIndexMap[this.inputGridKey] = 0;
     const uniqueZValues = [...new Set(layers.map(el => el.z))].sort((a, b) => a - b);
@@ -90,16 +94,15 @@ export class UIManager {
       zToIndexMap[zVal] = idx + 1;
     });
     this.zToIndexMap = zToIndexMap;
-    console.log("[DEBUG] zToIndexMap:", zToIndexMap);
   
-    // Build MAC composites using the MacVisualFactory.
+    // Build MAC composites
     layers.forEach(element => {
       if (element.type === 'mac') {
         const layerCenter = layerCenters[element.z];
         const layerIndex  = zToIndexMap[element.z] || 0;
         const macGroup    = this.macFactory.create(element, layerCenter, mac_spacing, layerIndex);
   
-        // Create or add to layer group.
+        // Create or add to layer group
         if (!this.layerGroups[element.z]) {
           const layerGroup = new THREE.Group();
           layerGroup.position.set(0, 0, this.layerSpacing * zToIndexMap[element.z]);
@@ -111,14 +114,14 @@ export class UIManager {
       }
     });
   
-    // Build CM objects using the CmVisualFactory.
+    // Build CM objects
     layers.forEach(element => {
       if (element.type === 'cm') {
         const layerCenter = layerCenters[element.z];
         const obj = this.cmFactory.create(element, layerCenter, mac_spacing);
         obj.userData.layerIndex = zToIndexMap[element.z] || 0;
   
-        // Attach to nearest MAC if available.
+        // Attach to nearest MAC if available
         const thisZ = element.z;
         let closestMac = null;
         let minDistance = Infinity;
@@ -142,14 +145,17 @@ export class UIManager {
       }
     });
   
-    // Build Neuron objects using the NeuronVisualFactory.
+    // Build Neuron objects
     layers.forEach(element => {
       if (element.type === 'neuron') {
         const layerCenter = layerCenters[element.z];
         const obj = this.neuronFactory.create(element, layerCenter, mac_spacing);
         obj.userData.layerIndex = zToIndexMap[element.z] || 0;
+
+        // Keep track of all neurons in an array
+        this.allNeurons.push(obj);
   
-        // Attach to nearest MAC if available.
+        // Attach to nearest MAC if available
         const thisZ = element.z;
         let closestMac = null;
         let minDistance = Infinity;
@@ -168,12 +174,13 @@ export class UIManager {
           obj.position.sub(closestMac.position);
           closestMac.add(obj);
         } else {
+          // Otherwise, add it directly to the layer group
           this.layerGroups[thisZ].add(obj);
         }
       }
     });
   
-    // Build input grid if provided.
+    // Build input grid if provided
     if (inputDims && inputDims.width && inputDims.height) {
       this.createInputGrid(inputDims.width, inputDims.height, inputActivations);
       if (!this.layerGroups[this.inputGridKey]) {
@@ -185,24 +192,22 @@ export class UIManager {
       this.layerGroups[this.inputGridKey].add(this.inputGridGroup);
     }
   
-    // Update dynamic individual layer controls.
+    // Update dynamic individual layer controls
     this.updateUniformScaleSliders();
   
-    // Remove the "hidden" class so that the controls become visible.
-    const uniformControls = document.getElementById('uniform-layer-scales');
+    // Make sure controls are visible
+    const uniformControls   = document.getElementById('uniform-layer-scales');
     const fullModelControls = document.getElementById('full-model-controls-box');
-    if (uniformControls) {
-      uniformControls.classList.remove('hidden');
-    }
-    if (fullModelControls) {
-      fullModelControls.classList.remove('hidden');
-    }
+    if (uniformControls)   uniformControls.classList.remove('hidden');
+    if (fullModelControls) fullModelControls.classList.remove('hidden');
 
-    // ← NEW: generate dummy arches and wire them to the checkbox
-    this.generateDummyConnections();
-    // ensure the checkbox state controls them immediately
+    // Generate *neuron* connections (instead of MAC->MAC)
+    // Let's do 50 random neuron-neuron connections for testing
+    this.generateDummyNeuronConnections(50);
+
+    // Tie them to the Weighted Connections checkbox
     const weightedChk = document.getElementById('weightedConnectionsCheckbox');
-    this.toggleDummyConnections(weightedChk?.checked);
+    this.toggleDummyNeuronConnections(weightedChk?.checked);
   }
   
   /**
@@ -250,11 +255,147 @@ export class UIManager {
       }
     }
   }
-  
+
+  /**
+   * Generate random neuron–neuron connections.
+   * If same layer => an arc (tube). Otherwise => line.
+   */
+  generateDummyNeuronConnections(numConnections = 50) {
+    // Clear old neuron connections if any
+    if (this._dummyNeuronConnections) {
+      this._dummyNeuronConnections.forEach(conn => {
+        this.scene.remove(conn.mesh);
+        conn.mesh.geometry.dispose();
+        if (conn.mesh.material) conn.mesh.material.dispose();
+      });
+    }
+    this._dummyNeuronConnections = [];
+
+    const n = this.allNeurons.length;
+    if (n < 2) return;
+
+    for (let i = 0; i < numConnections; i++) {
+      // Pick random pair of distinct neurons
+      const idxA = Math.floor(Math.random() * n);
+      const idxB = Math.floor(Math.random() * n);
+      if (idxA === idxB) continue;
+
+      const neuronA = this.allNeurons[idxA];
+      const neuronB = this.allNeurons[idxB];
+
+      // For now, pick a random weight
+      const weight = Math.random();
+
+      // Create mesh (arc or line, with color)
+      const mesh = this.createNeuronConnectionMesh(neuronA, neuronB, weight);
+
+      mesh.visible = false; // Start hidden
+      mesh.userData.isNeuronConnection = true;
+
+      this.scene.add(mesh);
+      this._dummyNeuronConnections.push({ neuronA, neuronB, mesh, weight });
+    }
+  }
+
+  /**
+   * If same layer => arc (tube).
+   * Otherwise => line.
+   * Also color them:
+   *  - bottom-up (layerA < layerB) => blue
+   *  - top-down   (layerA > layerB) => magenta
+   *  - same layer => green
+   */
+  createNeuronConnectionMesh(neuronA, neuronB, weight) {
+    const posA = new THREE.Vector3();
+    const posB = new THREE.Vector3();
+    neuronA.getWorldPosition(posA);
+    neuronB.getWorldPosition(posB);
+
+    const layerA = neuronA.userData.layerIndex;
+    const layerB = neuronB.userData.layerIndex;
+    
+    let color;
+    if (layerA < layerB) {
+      // bottom-up
+      color = new THREE.Color("#0000FF"); // Blue
+    } else if (layerA > layerB) {
+      // top-down
+      color = new THREE.Color("#FF00FF"); // Magenta
+    } else {
+      // same layer => green
+      color = new THREE.Color("#00FF00");
+    }
+
+    // If same layer => we do an arc (TubeGeometry)
+    if (layerA === layerB) {
+      const mid = posA.clone().lerp(posB, 0.5);
+      mid.z += 5; // "lift" for the arch
+      const curve = new THREE.QuadraticBezierCurve3(posA, mid, posB);
+
+      // Tube geometry
+      const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.03, 8, false);
+
+      // Material
+      const mat = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.7
+      });
+      return new THREE.Mesh(tubeGeo, mat);
+
+    } else {
+      // Different layers => just a line
+      const points = [posA, posB];
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const material = new THREE.LineBasicMaterial({ color });
+      return new THREE.Line(geometry, material);
+    }
+  }
+
+  /**
+   * Recompute geometry for each neuron–neuron connection (arc or line)
+   * in case neuron positions changed due to scaling or spacing.
+   */
+  updateDummyNeuronConnections() {
+    if (!this._dummyNeuronConnections) return;
+    this._dummyNeuronConnections.forEach(conn => {
+      const { neuronA, neuronB, mesh } = conn;
+      const posA = new THREE.Vector3();
+      const posB = new THREE.Vector3();
+      neuronA.getWorldPosition(posA);
+      neuronB.getWorldPosition(posB);
+
+      // If it's a Mesh (Tube) => same-layer arc
+      if (mesh.isMesh) {
+        const mid = posA.clone().lerp(posB, 0.5);
+        mid.z += 5;
+        const curve = new THREE.QuadraticBezierCurve3(posA, mid, posB);
+        const newGeo = new THREE.TubeGeometry(curve, 20, 0.03, 8, false);
+        mesh.geometry.dispose();
+        mesh.geometry = newGeo;
+
+      } else if (mesh.isLine) {
+        // If it's a Line => different-layer line
+        const newPts = [posA, posB];
+        const newGeo = new THREE.BufferGeometry().setFromPoints(newPts);
+        mesh.geometry.dispose();
+        mesh.geometry = newGeo;
+      }
+    });
+  }
+
+  /**
+   * Toggle visibility of neuron–neuron connections.
+   */
+  toggleDummyNeuronConnections(show) {
+    if (!this._dummyNeuronConnections) return;
+    this._dummyNeuronConnections.forEach(conn => {
+      conn.mesh.visible = show;
+    });
+  }
+
   /**
    * Dynamically updates the "Individual Layer Controls" container.
-   * Uses firstElementChild (assumed to be the header) to preserve the title.
-   * For the input layer (identified by this.inputGridKey), it does not add the toggles.
    */
   updateUniformScaleSliders() {
     const scaleContainer = document.getElementById('uniform-layer-scales');
@@ -263,7 +404,7 @@ export class UIManager {
     while (scaleContainer.children.length > 1) {
       scaleContainer.removeChild(scaleContainer.lastElementChild);
     }
-    // Sort keys: the input layer (this.inputGridKey) comes first; then others sorted numerically.
+    // Sort keys: input layer first, then others
     const zKeys = Object.keys(this.layerGroups).sort((a, b) => {
       if (a === this.inputGridKey) return -1;
       if (b === this.inputGridKey) return 1;
@@ -288,7 +429,7 @@ export class UIManager {
       subheading.className = 'layer-subheading';
       layerContainer.appendChild(subheading);
 
-      // --- Create slider row (common for all layers)
+      // Create slider row
       const sliderRow = document.createElement('div');
       sliderRow.className = 'slider-row';
       const scalingLabel = document.createElement('label');
@@ -306,6 +447,9 @@ export class UIManager {
       slider.addEventListener('input', (evt) => {
         const scaleVal = parseFloat(evt.target.value);
         this.layerGroups[key].scale.set(scaleVal, scaleVal, scaleVal);
+
+        // Recompute neuron lines/arches
+        this.updateDummyNeuronConnections();
       });
       sliderRow.appendChild(slider);
 
@@ -315,17 +459,19 @@ export class UIManager {
       resetBtn.addEventListener('click', () => {
         slider.value = '1.0';
         this.layerGroups[key].scale.set(1, 1, 1);
+
+        // "Snap" them back
+        this.updateDummyNeuronConnections();
       });
       sliderRow.appendChild(resetBtn);
       layerContainer.appendChild(sliderRow);
-      // --- End of slider row
 
-      // Only create the toggle row if this is not the input layer
+      // For all but the input layer, add toggles for MACs/CMs/Neurons
       if (key !== this.inputGridKey) {
         const toggleRow = document.createElement('div');
         toggleRow.className = 'toggle-row';
 
-        // Create MACs checkbox.
+        // MACs checkbox
         const macCheckbox = document.createElement('input');
         macCheckbox.type = 'checkbox';
         macCheckbox.id = `toggle-mac-${key}`;
@@ -336,7 +482,7 @@ export class UIManager {
         macLabel.textContent = 'MACs';
         toggleRow.appendChild(macLabel);
 
-        // Create CMs checkbox.
+        // CMs checkbox
         const cmCheckbox = document.createElement('input');
         cmCheckbox.type = 'checkbox';
         cmCheckbox.id = `toggle-cm-${key}`;
@@ -347,7 +493,7 @@ export class UIManager {
         cmLabel.textContent = 'CMs';
         toggleRow.appendChild(cmLabel);
 
-        // Create Neurons checkbox.
+        // Neurons checkbox
         const neuronCheckbox = document.createElement('input');
         neuronCheckbox.type = 'checkbox';
         neuronCheckbox.id = `toggle-neuron-${key}`;
@@ -360,7 +506,7 @@ export class UIManager {
 
         layerContainer.appendChild(toggleRow);
 
-        // Attach event listeners for each checkbox.
+        // Attach event listeners for each checkbox
         macCheckbox.addEventListener('change', () => {
           const show = macCheckbox.checked;
           if (this.layerGroups[key]) {
@@ -371,7 +517,8 @@ export class UIManager {
             });
             if (show) {
               this.layerGroups[key].traverse(child => {
-                if (child.userData && child.userData.type === 'mac' && !this.clickableMACs.includes(child)) {
+                if (child.userData && child.userData.type === 'mac'
+                    && !this.clickableMACs.includes(child)) {
                   this.clickableMACs.push(child);
                 }
               });
@@ -409,10 +556,10 @@ export class UIManager {
         });
       }
       
-      // Append the complete layer container (slider row and, if added, toggle row)
+      // Append this layer container to the scaleContainer
       scaleContainer.appendChild(layerContainer);
 
-      // Add a divider if not the last layer.
+      // Divider if not last layer
       if (index < zKeys.length - 1) {
         const divider = document.createElement('hr');
         divider.className = 'slider-divider';
@@ -454,7 +601,7 @@ export class UIManager {
         this.layerSpacing = 10;
         if (layerSpacingSlider) layerSpacingSlider.value = '10';
         this.updateLayerSpacing();
-
+      
         // 2) Reset uniform scales & visibility
         for (const key in this.layerGroups) {
           this.layerGroups[key].scale.set(1, 1, 1);
@@ -463,21 +610,24 @@ export class UIManager {
           });
         }
         this.updateUniformScaleSliders();
-
-        // 3) Reset the checkbox UI
+      
+        // 3) Reset Weighted Connections checkbox
         if (weightedChk) {
           weightedChk.checked = false;
         }
-
-        // 4) Hide dummy connections
-        this.toggleDummyConnections(false);
+      
+        // 4) Hide the connections
+        this.toggleDummyNeuronConnections(false);
+      
+        // *** 5) IMPORTANT: Recompute the connections so geometry matches the new scale/position
+        this.updateDummyNeuronConnections(); // or updateDummyConnections() if using MAC arcs
       });
     }
 
     // Weighted Connections checkbox
     if (weightedChk) {
       weightedChk.addEventListener('change', (e) => {
-        this.toggleDummyConnections(e.target.checked);
+        this.toggleDummyNeuronConnections(e.target.checked);
       });
     }
   }
@@ -490,89 +640,20 @@ export class UIManager {
       const layerIndex = this.zToIndexMap[key];
       this.layerGroups[key].position.z = this.layerSpacing * layerIndex;
     }
+
+    // Recompute neuron lines/arches so they "snap" to new positions
+    this.updateDummyNeuronConnections();
   }
 
-  /**
-   * Generate a fixed set of dummy MAC‑to‑MAC connections (by index)
-   * and draw them as arches.
-   * Replace the `dummyPairs` array later with real data.
-   */
-  generateDummyConnections() {
-    // Example dummy pairs of indices into this.clickableMACs
-    const dummyPairs = [
-      [0, 5],
-      [2, 3],
-      [1, 4],
-      [6, 7],
-      [2, 8],
-      [9, 3],
-      [10, 11],
-      [5, 12],
-      [7, 0],
-      [4, 9]
-    ];
+  // ---------- MAC Click Handling (unchanged) -----------------
 
-    // Clear any existing dummy meshes
-    if (this._dummyMeshes) {
-      this._dummyMeshes.forEach(m => {
-        this.scene.remove(m);
-        m.geometry.dispose();
-        m.material.dispose();
-      });
-    }
-    this._dummyMeshes = [];
-
-    dummyPairs.forEach(([i, j]) => {
-      const macA = this.clickableMACs[i];
-      const macB = this.clickableMACs[j];
-      if (!macA || !macB) return;
-
-      // world positions
-      const posA = new THREE.Vector3();
-      const posB = new THREE.Vector3();
-      macA.getWorldPosition(posA);
-      macB.getWorldPosition(posB);
-
-      // mid‑point arch
-      const mid = posA.clone().lerp(posB, 0.5);
-      mid.z += 5; // lift arch height
-
-      // quadratic Bézier curve
-      const curve = new THREE.QuadraticBezierCurve3(posA, mid, posB);
-
-      // tube geometry
-      const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.1, 8, false);
-
-      // dummy weight color (random for now)
-      const weight = Math.random();
-      const mat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(1 - weight, weight, 0),
-        transparent: true,
-        opacity: 0.7
-      });
-
-      const mesh = new THREE.Mesh(tubeGeo, mat);
-      mesh.visible = false; // start hidden
-      mesh.userData.isDummyConnection = true;
-      this.scene.add(mesh);
-      this._dummyMeshes.push(mesh);
-    });
-  }
-
-  /**
-   * Toggle visibility of all dummy connections.
-   */
-  toggleDummyConnections(show) {
-    if (!this._dummyMeshes) return;
-    this._dummyMeshes.forEach(m => m.visible = show);
-  }
-
-  
   onSceneClick(event) {
     const rect = this.sceneManager.renderer.domElement.getBoundingClientRect();
     this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.mouse, this.sceneManager.camera);
+
+    // Intersect only with clickable MACs
     const intersects = this.raycaster.intersectObjects(this.clickableMACs, true);
     if (intersects.length > 0) {
       const macGroup = this.getMACGroup(intersects[0].object);
@@ -595,10 +676,10 @@ export class UIManager {
   
   toggleMACSelection(macGroup) {
     const outlineLine = macGroup.userData.outlineLine;
-    function disableRaycast(object) {
-      object.raycast = () => {};
-      if (object.children) {
-        object.children.forEach(child => disableRaycast(child));
+    function disableRaycast(obj) {
+      obj.raycast = () => {};
+      if (obj.children) {
+        obj.children.forEach(child => disableRaycast(child));
       }
     }
     if (macGroup.userData.isSelected) {
@@ -659,7 +740,9 @@ export class UIManager {
       macGroup.userData.canvasWrapper = null;
     });
   }
-  
+
+  // ---------- MAC Canvas/Bar Graph stuff (unchanged) -----------------
+
   createMACCanvas(macGroup) {
     const containerDiv = document.createElement('div');
     containerDiv.classList.add('mac-canvas-wrapper');
@@ -707,13 +790,17 @@ export class UIManager {
     topScene.background = new THREE.Color(0xffffff);
     const aspect = canvas.width / canvas.height;
     const viewSize = 5;
-    const topCamera = new THREE.OrthographicCamera(-viewSize * aspect, viewSize * aspect, viewSize, -viewSize, 0.1, 100);
+    const topCamera = new THREE.OrthographicCamera(
+      -viewSize * aspect, viewSize * aspect,
+       viewSize,          -viewSize,
+      0.1, 100
+    );
     topCamera.position.set(0, 0, 10);
     topCamera.lookAt(0, 0, 0);
+
     const compositeClone = macGroup.clone(true);
     this.resetOutlineColor(compositeClone);
-    const scaleFactor = 1.5;
-    compositeClone.scale.set(scaleFactor, scaleFactor, scaleFactor);
+    compositeClone.scale.set(1.5, 1.5, 1.5);
     compositeClone.position.set(0, 0, 0);
     topScene.add(compositeClone);
   
@@ -722,8 +809,10 @@ export class UIManager {
       this.sharedTopRenderer.setRenderTarget(renderTarget);
       this.sharedTopRenderer.render(topScene, topCamera);
       this.sharedTopRenderer.setRenderTarget(null);
+
       const pixelBuffer = new Uint8Array(canvas.width * canvas.height * 4);
       this.sharedTopRenderer.readRenderTargetPixels(renderTarget, 0, 0, canvas.width, canvas.height, pixelBuffer);
+
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = canvas.width;
       tempCanvas.height = canvas.height;
@@ -732,9 +821,11 @@ export class UIManager {
       imageData.data.set(pixelBuffer);
       this.flipImageDataVertically(imageData);
       tempCtx.putImageData(imageData, 0, 0);
+
       const ctx2d = canvas.getContext('2d');
       ctx2d.clearRect(0, 0, canvas.width, canvas.height);
       ctx2d.drawImage(tempCanvas, 0, 0);
+
       renderTarget.dispose();
     } catch (error) {
       console.error('Error creating top view:', error);
@@ -744,6 +835,7 @@ export class UIManager {
   renderBarGraph(macGroup, canvas) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Just a dummy bar graph
     const sampleData = Array.from({ length: 40 }, () => Math.random());
     const fixedBarWidth = 10;
     const gap = 8;
@@ -767,7 +859,8 @@ export class UIManager {
   
   resetOutlineColor(group) {
     group.traverse(child => {
-      if (child.isLine && child.material && child.material.color && child.userData && child.userData.type === 'mac_outline') {
+      if (child.isLine && child.material && child.material.color &&
+          child.userData && child.userData.type === 'mac_outline') {
         child.material.color.set(0x000000);
       }
     });
@@ -780,7 +873,7 @@ export class UIManager {
     const bytesPerRow = width * 4;
     const temp = new Uint8Array(bytesPerRow);
     for (let row = 0; row < halfHeight; row++) {
-      const topOffset = row * bytesPerRow;
+      const topOffset    = row * bytesPerRow;
       const bottomOffset = (height - row - 1) * bytesPerRow;
       temp.set(imageData.data.slice(topOffset, topOffset + bytesPerRow));
       imageData.data.copyWithin(topOffset, bottomOffset, bottomOffset + bytesPerRow);
@@ -804,9 +897,6 @@ export class UIManager {
   }
   
   updateProjectDropdown(projects) {
-    console.log('🔍 updateProjectDropdown called, projects =', projects);
-    console.log('🔍 this.projectSelect =', this.projectSelect);
-
     if (!this.projectSelect) {
       console.error('❌ projectSelect element not found!');
       return;
@@ -824,14 +914,12 @@ export class UIManager {
   }
   
   updateRunDropdown(project_runs) {
-    console.log('Updating run dropdown with data:', project_runs);
     if (!this.runSelect) {
       console.error('Run select element not found!');
       return;
     }
     this.runSelect.innerHTML = '<option value="" disabled selected>Select a run</option>';
     if (!Array.isArray(project_runs) || project_runs.length === 0) {
-      console.log('No valid runs data to display');
       this.runSelect.innerHTML = '<option value="" disabled selected>No runs available</option>';
       this.runSelect.disabled = true;
       this.visualizeButton.disabled = true;
@@ -857,9 +945,12 @@ export class UIManager {
       this.macDetailsMsg.textContent = '(Click on a MAC to see its details)';
       return;
     }
-    this.macDetailsMsg.textContent = `MAC ID: ${macData.id}
-        Layer: ${macData.layer}
-        Position: (${macData.position.x.toFixed(4)}, ${macData.position.y.toFixed(4)}, ${macData.position.z.toFixed(4)})`;
+    this.macDetailsMsg.textContent =
+      `MAC ID: ${macData.id}
+       Layer: ${macData.layer}
+       Position: (${macData.position.x.toFixed(4)}, 
+                   ${macData.position.y.toFixed(4)}, 
+                   ${macData.position.z.toFixed(4)})`;
   }
   
   clearBottomPanel() {
