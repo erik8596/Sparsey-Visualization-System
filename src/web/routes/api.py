@@ -153,44 +153,42 @@ def visualize(project_name, run_id):
 @api.route('/<project_name>/<run_id>/<int:step>/weight_connections', methods=['GET'])
 def get_weight_connections(project_name, run_id, step: int):
     """
-    Fetches weight connections for a specific run and step.
+    Fetches and parses weight connections for a specific run and step.
+    Uses caching and loads only the required artifact step from W&B if necessary.
     """
     try:
-        # Ensure the correct model config and artifacts are loaded for this run
+        # 1. Set W&B Facade context to the correct run
+        #    First, ensure the facade knows about runs in this project
+        wbf.load_runs_from_project(project_name=project_name)
+        #    Then, attempt to update to the specific run
+        if not wbf.update_run(run_id=run_id, project_name=project_name):
+            return jsonify({"error": f"Run ID '{run_id}' not found in project '{project_name}'"}), 404
+
+        # 2. Ensure model configuration (layer/input dims) is loaded for the parser
         model_config = wbf.get_processed_model_config(run_id=run_id, project_name=project_name)
         if not model_config or not model_config.layers:
              return jsonify({"error": "Failed to load model configuration for the run"}), 500
         
-        # Ensure weight artifacts are loaded if not already present in config
-        # The parser's __init__ will handle calling find_weight_artifacts if needed.
-        if not model_config.weighted_connections:
-             # find_weight_artifacts downloads *all* steps, not just one.
-             wbf.find_weight_artifacts(run_id=run_id, project_name=project_name)
-             # Refresh model_config view after potential artifact loading
-             model_config = wbf.mconf 
-             if not model_config.weighted_connections:
-                 # If still no connections after trying to fetch, then they don't exist
-                 return jsonify({'error': f'No weight artifacts found for run {run_id} after checking WandB.'}), 404
+        # 3. Get the specific step data (loads from cache or W&B if needed)
+        # This method now loads the data into wbf.mconf.weighted_connections[step]
+        step_data = wbf.get_weighted_connections_for_step(step)
+        if step_data is None:
+            # Error message/reason is printed by the facade method
+            return jsonify({'error': f'Weighted connections for step {step} not found or could not be loaded.'}), 404
 
-        # Initialize the parser now that wbf state is updated for the specific run
+        # 4. Initialize the parser (it will find config and step data in wbf.mconf)
         wcp = WeightedConnectionsParser(wbf)
 
-        # Parse the specific step. parse() will raise ValueError if step_int not found.
-        weight_connections = wcp.parse(step)
-        return jsonify(weight_connections)
+        # 5. Parse the specific step data (already loaded into memory)
+        parsed_connections = wcp.parse(step)
+        return jsonify(parsed_connections)
         
-    except ValueError as ve: # Catch specific expected errors like missing step from parse()
-        print(f"API: Value error fetching weight connections - {str(ve)}")
-        # Check if the error message indicates the step wasn't found
-        if f"step {step}" in str(ve) and "Available steps" in str(ve):
-             return jsonify({'error': str(ve)}), 404 # Not found
-        else:
-            # Handle other potential ValueErrors (e.g., config issues within parse)
-            return jsonify({'error': f'Configuration or data error: {str(ve)}'}), 500
+    except ValueError as ve: # Catch specific expected errors from parser
+        print(f"API: Value error processing weight connections - {str(ve)}")
+        return jsonify({'error': f'Configuration or data error during parsing: {str(ve)}'}), 500
             
     except Exception as e:
-        print(f"API: Unexpected error fetching weight connections - {str(e)}")
-        # Log the full traceback for debugging
+        print(f"API: Unexpected error fetching weight connections for step {step} - {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': "An internal error occurred"}), 500

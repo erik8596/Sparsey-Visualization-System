@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass, field
 from src.core.model.wandb.model_config import ModelConfig
 import concurrent.futures
+import logging # Import logging
 
 
 STS = "sparsey-testing-system"  # default weights and biases entity name
@@ -446,4 +447,124 @@ class WandBFacade:
         self.mconf.weighted_connections = results
         return results
 
+    def _get_artifact_cache_path(self, step: int) -> Optional[str]:
+        """Constructs the expected path to the cached .pt file for a given step."""
+        if not self.run_id:
+            print("Error: Run ID not set in WandBFacade. Cannot determine cache path.")
+            return None
+        
+        version_dir = os.path.join(DATA_ARTIFACT_STORE_PATH, 'weighted_connections', self.run_id, f"v{step}")
+        
+        # Need the specific artifact filename pattern. Assuming it matches the artifact name.
+        # Artifact name format: {run_id}-weights:v{step}
+        # Expected .pt file name might just be something generic like model.pt or specific.
+        # Let's assume we need to look for *any* .pt file in the version_dir for now.
+        if os.path.isdir(version_dir):
+            try:
+                for filename in os.listdir(version_dir):
+                    if filename.endswith('.pt'):
+                        return os.path.join(version_dir, filename)
+            except OSError as e:
+                print(f"Error accessing cache directory {version_dir}: {e}")
+                return None
+        return None # Directory or file not found
+
+    def _load_artifact_from_cache(self, step: int) -> Optional[Dict[str, Any]]:
+        """Loads artifact data for a step from the local file cache."""
+        pt_file_path = self._get_artifact_cache_path(step)
+        if pt_file_path:
+            print(f"Cache hit for step {step}: Found {pt_file_path}. Loading...")
+            try:
+                artifact_data = torch_load(pt_file_path)
+                # Store in memory cache
+                if not self.mconf: self.mconf = ModelConfig() # Ensure mconf exists
+                if not hasattr(self.mconf, 'weighted_connections'): self.mconf.weighted_connections = {}
+                self.mconf.weighted_connections[step] = artifact_data
+                print(f"Successfully loaded and cached data for step {step} from file.")
+                return artifact_data
+            except Exception as e:
+                print(f"Error loading cached file {pt_file_path} for step {step}: {e}. Will attempt W&B fetch.")
+                # Consider removing the corrupted cache file here?
+        return None
+
+    def _fetch_and_load_specific_artifact(self, step: int) -> Optional[Dict[str, Any]]:
+        """Fetches a specific artifact version from W&B, saves, loads, and caches it."""
+        if not all([self.run_id, self.project_name, self.entity]):
+            print("Error: Facade requires run_id, project_name, and entity to fetch artifact.")
+            return None
+            
+        try:
+            # Construct artifact details
+            artifact_version_name = f"{self.run_id}-weights:v{step}"
+            artifact_full_wandb_path = f"{self.entity}/{self.project_name}/{artifact_version_name}"
+            version_download_dir = os.path.join(DATA_ARTIFACT_STORE_PATH, 'weighted_connections', self.run_id, f"v{step}")
+            os.makedirs(version_download_dir, exist_ok=True)
+
+            print(f"Cache miss for step {step}. Fetching artifact: {artifact_full_wandb_path}...")
+            
+            # Fetch and download the specific artifact version
+            # Use self.api() which should be thread-safe for read operations generally
+            artifact = self.api().artifact(name=artifact_full_wandb_path, type='weighted_connections') 
+            download_result_path = artifact.download(root=version_download_dir)
+            print(f"Artifact for step {step} downloaded to: {download_result_path}")
+
+            # Find the .pt file within the specific version's directory (after download)
+            pt_file = None
+            for filename in os.listdir(version_download_dir):
+                if filename.endswith('.pt'):
+                    pt_file = os.path.join(version_download_dir, filename)
+                    print(f"  Found .pt file after download: {filename}")
+                    break
+            
+            # Load the data if found
+            if pt_file:
+                artifact_data = torch_load(pt_file)
+                 # Store in memory cache
+                if not self.mconf: self.mconf = ModelConfig() # Ensure mconf exists
+                if not hasattr(self.mconf, 'weighted_connections'): self.mconf.weighted_connections = {}
+                self.mconf.weighted_connections[step] = artifact_data
+                print(f"Successfully loaded and cached data for step {step} from W&B.")
+                return artifact_data
+            else:
+                print(f"Warning: Pytorch (.pt) file not found in downloaded artifact for step {step} at {version_download_dir}")
+                return None
+        
+        except wandb.errors.CommError as ce:
+            # Specific handling for artifact not found or other API errors
+            if "Could not find artifact" in str(ce) or "Not Found" in str(ce):
+                 print(f"Artifact for step {step} ({artifact_full_wandb_path}) not found on W&B.")
+            else:
+                 print(f"Error fetching/downloading artifact for step {step}: {ce}")
+            return None
+        except Exception as e:
+            print(f"Unexpected error fetching/loading artifact for step {step}: {e}")
+            # Potentially call self._handle_api_error(f"artifact fetching step {step}", e)
+            return None
+
+    def get_weighted_connections_for_step(self, step: int) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves the weighted connections data for a specific step, using cache first.
+
+        Checks memory cache, then file cache, then fetches *only* the required
+        artifact from W&B if necessary.
+
+        Args:
+            step (int): The step number for which to retrieve connections.
+
+        Returns:
+            Optional[Dict[str, Any]]: Connection data for the step, or None if unavailable.
+        """
+        # 1. Check memory cache
+        if self.mconf and hasattr(self.mconf, 'weighted_connections') and step in self.mconf.weighted_connections:
+            print(f"Memory cache hit for step {step}.")
+            return self.mconf.weighted_connections[step]
+
+        # 2. Check file cache
+        cached_data = self._load_artifact_from_cache(step)
+        if cached_data is not None:
+            return cached_data
+            
+        # 3. Fetch from W&B (will also load and cache in memory if successful)
+        return self._fetch_and_load_specific_artifact(step)
+        
         

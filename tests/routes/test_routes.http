@@ -1,7 +1,7 @@
 @baseUrl = http://localhost:8000
 @project_name = weights_testing
 @run_id = 3axyziyf
-@step = 36
+@step = 49
 
 ### get projects
 GET {{baseUrl}}/api/projects
