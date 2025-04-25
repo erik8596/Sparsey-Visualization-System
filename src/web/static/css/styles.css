@@ -1,10 +1,30 @@
+/* Root variables for colors, fonts, and spacing */
+:root {
+  --font-sans: "Inter", sans-serif;
+  --font-alt: "IBM Plex Sans", "Source Sans Pro", sans-serif;
+  --font-mono: "Fira Code", monospace;
+
+  --color-bg-light: #f2f2f2;
+  --color-bg-default: #fff;
+  --color-panel-bg: #ccc;
+  --color-border-dark: #000;
+  --color-border-light: #ccc;
+  --color-panel-border: #888;
+  --color-text-primary: #333;
+  --color-text-secondary: #000;
+  --color-ui-bg: #333;
+  --color-ui-fg: #fff;
+
+  --gap-default: 10px;
+}
+
 /* Reset some default spacing */
-body,
-html {
+html,
+body {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: Arial, sans-serif;
+  font: 1rem/1.5 var(--font-sans);
 }
 
 /* Hidden class definition */
@@ -14,23 +34,39 @@ html {
 
 /* Header styles */
 header {
-  padding: 10px;
-  background-color: #f2f2f2;
-  border-bottom: 1px solid #ddd;
+  padding: 3px 10px;
+  background-color: var(--color-bg-light);
+  border-bottom: 3px solid var(--color-border-dark);
 }
 header h1 {
   margin: 0 0 10px;
+  font-family: var(--font-sans), var(--font-alt);
+  font-weight: 600;
+  font-size: 1.5rem;
+}
+
+/* Code blocks & inline code */
+code,
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
 }
 
 /* Controls styling */
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--gap-default);
   align-items: center;
 }
+.controls #projectSelect {
+  margin-right: 3em;
+}
+.controls #visualizeButton {
+  margin-left: 3em;
+}
 
-/* Main container holds both the Three.js scene and the left panel wrapper */
+/* Main container holds both the Three.js scene and side panels */
 main {
   display: flex;
   height: calc(100% - 80px);
@@ -57,10 +93,10 @@ main {
 /* Side panel for dynamic canvases */
 #side-panel {
   width: 300px;
-  padding: 20px;
+  padding: 8px;
   box-sizing: border-box;
-  background-color: #fff;
-  border-left: 1px solid #ccc;
+  background-color: var(--color-bg-default);
+  border-left: 1px solid var(--color-border-light);
   overflow-y: auto;
   z-index: 100;
 }
@@ -72,79 +108,73 @@ main {
 #mac-details {
   margin-bottom: 10px;
   line-height: 1.5;
-  color: #333;
+  color: var(--color-text-primary);
 }
 #mac-details-container {
   position: absolute;
-  top: 40px;
-  right: 15px;
+  top: 35px;
+  right: 9px;
   text-align: center;
 }
 #mac-details-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
 }
 #mac-details-header {
-  font-size: 1.3em;
-  font-weight: bold;
+  font: bold 1rem var(--font-sans);
   margin: 0;
-}
-#resetButton {
-  padding: 3px 7px;
-  font-size: 0.8em;
 }
 #mac-details-msg {
   font-style: italic;
   font-size: 0.8em;
-  margin-top: 3px;
+  margin-top: -0.2rem;
 }
 
-/* Toggle buttons – fixed at bottom with a smooth transform transition */
+/* Toggle buttons – fixed at bottom with a smooth transform */
 .toggle-button {
   position: fixed;
-  background-color: #333;
-  color: white;
+  background-color: var(--color-ui-bg);
+  color: var(--color-ui-fg);
   border: none;
-  padding: 10px 15px;
   cursor: pointer;
-  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  line-height: 1;
+  width: 50px;
+  height: 40px;
   z-index: 1000;
   transition: transform 0.3s ease-in-out;
 }
 
-/* Make both toggle buttons the same size */
-.toggle-button {
-  width: 40px;
-  height: 40px;
-  padding: 0;           /* remove the old padding */
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* enable vertical stacking of icon + text in toggle buttons */
+.toggle-with-text {
+  flex-direction: column;
+  height: auto; /* allow content-driven height */
+  padding: 4px 0;
 }
-
-/* Optionally bump font-size so the icon fills the button */
-.toggle-button {
+.toggle-with-text .toggle-icon {
   font-size: 24px;
   line-height: 1;
 }
+.toggle-with-text .toggle-text {
+  font-size: 0.7rem;
+  margin-top: 2px;
+  user-select: none;
+}
 
-/* Panel 1 toggle button (bottom) */
 #toggle-panel-btn-1 {
   bottom: 30px;
   left: 0;
 }
-/* Panel 2 toggle button (stacked above Panel 1) */
 #toggle-panel-btn-2 {
   bottom: 80px;
   left: 0;
 }
-
-/* Body state classes: move each toggle button when its panel is open */
-body.panel-open-1 #toggle-panel-btn-1 {
-  transform: translateX(300px);
-}
+body.panel-open-1 #toggle-panel-btn-1,
 body.panel-open-2 #toggle-panel-btn-2 {
   transform: translateX(300px);
 }
@@ -152,123 +182,116 @@ body.panel-open-2 #toggle-panel-btn-2 {
 /* Left Side Panels – both start collapsed (off-screen) */
 .side-panel {
   position: fixed;
-  top: 90px; /* below header */
+  top: 77px;
+  left: 0;
   width: 280px;
-  height: calc(100vh - 90px);
-  background-color: #333;
-  color: white;
-  transition: transform 0.3s ease-in-out;
-  transform: translateX(-300px);
-  overflow-y: auto;
-  padding: 10px;
-  box-sizing: border-box;
-  z-index: 1100;
+  height: calc(100vh - 77px);
+  background-color: var(--color-ui-bg);
+  color: var(--color-ui-fg);
   display: flex;
   flex-direction: column;
   align-items: center;
+  overflow-y: auto;
+  padding: 10px;
+  box-sizing: border-box;
+  transform: translateX(-300px);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1100;
 }
 .side-panel.open {
   transform: translateX(0) !important;
 }
 
-/* Position Panel 1 at left:0, Panel 2 offset */
-#left-side-panel-1 {
-  left: 0;
-}
-#left-side-panel-2 {
-  left: 0;
-}
-
 /* Shared box style for side panel boxes */
 .side-panel-box {
-  padding: 10px;
-  border-radius: 5px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-  background-color: #ccc;
-  border: 2px solid #888;
   width: 100%;
-  box-sizing: border-box;
+  padding: 5px;
+  background-color: var(--color-panel-bg);
+  border: 2px solid var(--color-panel-border);
+  border-radius: 5px;
   text-align: center;
-  margin-bottom: 10px;
+  box-sizing: border-box;
 }
 
 /* Make the select full-width and scrollable */
 #inputSelect {
   width: 100%;
-  box-sizing: border-box;
   font-size: 0.9em;
 }
 
 /* Camera control pane styling */
 #camera-control-pane {
-  margin-top: 20px;
+  margin-top: -1px;
+  padding: 5px 10px 10px;
 }
 .camera-controls-header {
-  font-style: italic;
+  font-size: 0.9em;
   margin: 0 0 10px 0;
-  color: #000;
+  color: var(--color-text-secondary);
 }
 
-/* Uniform Layer Controls (Individual Layer Controls) */
-#uniform-layer-scales {
-  margin-top: 20px;
-  padding: 10px;
-  background-color: #ccc;
-  border: 2px solid #888;
-  border-radius: 5px;
-  color: #000;
-  width: 100%;
-  box-sizing: border-box;
-  text-align: center;
-}
-#uniform-layer-scales h4 {
-  margin: 0;
-  margin-bottom: 5px;
-  text-align: center;
-  font-style: italic;
-}
-
-/* Full Model Controls */
+/* Uniform Layer Controls & Full Model Controls */
+#uniform-layer-scales,
 #full-model-controls-box {
-  margin-top: 20px;
-  padding: 10px;
-  background-color: #ccc;
-  border: 2px solid #888;
+  margin-top: 10px;
+  padding: 4px 10px 10px;
+  background-color: var(--color-panel-bg);
+  border: 2px solid var(--color-panel-border);
   border-radius: 5px;
-  color: black;
-  width: 100%;
-  box-sizing: border-box;
+  color: var(--color-text-secondary);
   text-align: center;
+  box-sizing: border-box;
 }
+#uniform-layer-scales.hidden,
+#full-model-controls-box.hidden {
+  display: none;
+}
+#uniform-layer-scales h4,
 #full-model-controls-box h4 {
   margin: 0;
-  margin-bottom: 10px;
-  text-align: center;
-  font-style: italic;
-  color: black;
+  margin-bottom: 0.8rem;
+  font-size: 0.9em;
+  position: relative;
 }
+
+/* Divider under headers */
+#camera-control-pane h4::after,
+#full-model-controls-box h4::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 2px;
+  background-color: #444;
+  margin: 0 0 0.5rem;
+}
+
+/* Slider group styling */
 .slider-group {
-  margin-bottom: 8px;
   display: flex;
   align-items: center;
+  margin-bottom: 8px;
 }
 .slider-label {
-  margin-right: 8px;
   font-size: 0.8em;
+  margin-right: 8px;
+  display: inline-block;
+  text-align: left;
 }
 .layer-slider {
-  width: 150px;
+  width: 120px;
 }
 .slider-reset-btn {
   margin-left: 8px;
   padding: 2px 6px;
   font-size: 0.8em;
 }
+
+/* Slider divider */
 .slider-divider {
   width: 100%;
+  height: 2px;
+  background-color: #444;
   border: none;
-  height: 1px;
-  background-color: #fff;
 }
 
 /* Main canvas container */
@@ -282,50 +305,88 @@ body.panel-open-2 #toggle-panel-btn-2 {
   align-items: center;
 }
 
-/* Additional styling for MAC canvas wrappers and bar graphs */
+/* MAC canvas wrappers and charts */
 .mac-canvas-wrapper {
-  margin-bottom: 10px;
+  margin-bottom: 4px;
   text-align: center;
 }
 .mac-canvas-label {
-  margin: 0 0 5px 0;
+  font-weight: bold;
+  margin: 0 0 5px;
 }
 .mac-top-canvas {
-  border: 2px solid #ccc;
   display: block;
   margin: 0 auto;
+  border: 2px solid var(--color-border-light);
 }
 .bar-graph-label {
-  margin: 5px 0;
-  font-style: italic;
+  margin: 0.5rem 0 -0.5rem;
+  font-size: 0.9rem;
+  font-style: normal;
+  font-weight: 400;
 }
 .bar-graph-scroll-container {
   width: 200px;
+ 	margin: 0 auto;
   overflow-x: auto;
-  display: block;
-  margin: 0 auto;
 }
 .bar-graph-canvas {
-  border: 1px solid #ccc;
+  display: block;
   margin-top: 5px;
+  border: 1px solid var(--color-border-light);
 }
-/* Style the “Choose an Input” header in Panel 2 */
+
+/* Toggle-row utility */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-top: 0.1rem;
+  gap: 0;
+}
+.toggle-prefix {
+  margin-right: 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.toggle-row label {
+  font-size: 0.75rem;
+  font-style: italic;
+  line-height: 1;
+}
+.toggle-row input[type="checkbox"] {	margin-right: 0.8rem;
+}
+
+/* Visualize button width */
+#visualizeButton { width: 100px; }
+
+/* Side-panel left border override */
+#side-panel { border-left: 3px solid var(--color-border-dark); }
+
+/* Reset Toggled MACs button styling */
+#resetButton {
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+/* Input Panel header style */
 #left-side-panel-2 h4 {
   color: black;
-  font-style: italic;
-  margin: 0 0 10px; /* optional spacing */
+  font-size: 0.9rem;
+  margin: 0 0 10px;
 }
-/* Standalone RESET ALL button styling */
+
+/* RESET ALL button styling */
 .reset-model-btn {
-  margin: 10px 0;
-  cursor: pointer;
-  background-color: #ccc;
-  color: black;
-  border: 2px solid #888;
-  border-radius: 5px;
+  width: calc(100% - 20px);
+  margin-top: 1.5rem;
   padding: 8px;
-  width: calc(100% - 20px); /* account for panel padding */
-  box-sizing: border-box;
+  background-color: var(--color-panel-bg);
+  color: var(--color-text-secondary);
+  border: 2px solid var(--color-panel-border);
+  border-radius: 5px;
   font-weight: bold;
   text-align: center;
+  cursor: pointer;
 }

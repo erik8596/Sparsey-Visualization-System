@@ -330,8 +330,18 @@ export class UIManager {
 
     // If same layer => tube arc; otherwise => line
     if (layerA === layerB) {
+      // replace the fixed lift with a dynamic one
       const mid = posA.clone().lerp(posB, 0.5);
-      mid.z += 5; // "lift" for the arc
+
+      // compute how many layers apart this connection is
+      const layerDiff = Math.abs(layerA - layerB);
+
+      // if same layer, give it a small bump; otherwise base it on layerDiff
+      const lift = layerDiff > 0
+        ? layerDiff * this.layerSpacing * 0.5   // 50% of total layer separation
+        : this.layerSpacing * 0.3;              // 30% bump when layerDiff === 0
+      mid.z += lift;
+
       const curve = new THREE.QuadraticBezierCurve3(posA, mid, posB);
       const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.03, 8, false);
       const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7 });
@@ -439,181 +449,190 @@ export class UIManager {
   }
 
   /**
-   * Dynamically updates the "Individual Layer Controls" container.
-   */
-  updateUniformScaleSliders() {
-    const scaleContainer = document.getElementById('uniform-layer-scales');
-    if (!scaleContainer) return;
-    // Remove all children except the header (first element)
-    while (scaleContainer.children.length > 1) {
-      scaleContainer.removeChild(scaleContainer.lastElementChild);
-    }
-    // Sort keys: input layer first, then others
-    const zKeys = Object.keys(this.layerGroups).sort((a, b) => {
+ * Dynamically updates the "Individual Layer Controls" container.
+ * Places each label to the left of its checkbox (MACs, CMs, Neurons).
+ */
+updateUniformScaleSliders() {
+  const scaleContainer = document.getElementById('uniform-layer-scales');
+  if (!scaleContainer) return;
+
+  // 1) Clear out any previous controls, leaving only the header
+  while (scaleContainer.children.length > 1) {
+    scaleContainer.removeChild(scaleContainer.lastElementChild);
+  }
+
+  // 2) Sort the layer keys: input first, then numeric layers in descending order
+  const zKeys = Object.keys(this.layerGroups)
+    .sort((a, b) => {
       if (a === this.inputGridKey) return -1;
       if (b === this.inputGridKey) return 1;
       return Number(a) - Number(b);
-    }).reverse();
+    })
+    .reverse();
 
-    zKeys.forEach((key, index) => {
-      let labelName;
-      if (key === this.inputGridKey) {
-        labelName = 'Input Layer';
-      } else if (this.zToIndexMap && this.zToIndexMap[key] != null) {
-        labelName = `Layer ${this.zToIndexMap[key]}`;
-      } else {
-        labelName = `Layer Z=${key}`;
-      }
+  // 3) Build a control block for each layer
+  zKeys.forEach((key, index) => {
+    // 3a) Determine a human‑readable name
+    let labelName;
+    if (key === this.inputGridKey) {
+      labelName = '- Input Layer -';
+    } else if (this.zToIndexMap && this.zToIndexMap[key] != null) {
+      labelName = `- Layer ${this.zToIndexMap[key]} -`;
+    } else {
+      labelName = `- Layer Z=${key} -`;
+    }
 
-      const layerContainer = document.createElement('div');
-      layerContainer.className = 'layer-container';
+    // 3b) Create the container and subheading
+    const layerContainer = document.createElement('div');
+    layerContainer.className = 'layer-container';
 
-      const subheading = document.createElement('h5');
-      subheading.textContent = labelName;
-      subheading.className = 'layer-subheading';
-      layerContainer.appendChild(subheading);
+    const subheading = document.createElement('h5');
+    subheading.textContent = labelName;
+    subheading.className = 'layer-subheading';
+    layerContainer.appendChild(subheading);
 
-      // Create slider row
-      const sliderRow = document.createElement('div');
-      sliderRow.className = 'slider-row';
-      const scalingLabel = document.createElement('label');
-      scalingLabel.textContent = 'Scaling:';
-      scalingLabel.className = 'scaling-label';
-      sliderRow.appendChild(scalingLabel);
+    // 3c) Slider row
+    const sliderRow = document.createElement('div');
+    sliderRow.className = 'slider-row';
 
-      const slider = document.createElement('input');
-      slider.type = 'range';
-      slider.min = '0.1';
-      slider.max = '3.0';
-      slider.step = '0.05';
-      slider.value = '1.0';
-      slider.className = 'layer-slider';
-      slider.addEventListener('input', (evt) => {
-        const scaleVal = parseFloat(evt.target.value);
-        this.layerGroups[key].scale.set(scaleVal, scaleVal, scaleVal);
+    const scalingLabel = document.createElement('label');
+    scalingLabel.textContent = 'Scale:  ';
+    scalingLabel.className = 'scaling-label';
+    sliderRow.appendChild(scalingLabel);
 
-        // Recompute connections
-        this.updateDummyNeuronConnections();
-        // Refresh final visibility if needed
-        this.refreshConnectionVisibility();
-      });
-      sliderRow.appendChild(slider);
-
-      const resetBtn = document.createElement('button');
-      resetBtn.textContent = 'Reset';
-      resetBtn.className = 'slider-reset-btn';
-      resetBtn.addEventListener('click', () => {
-        slider.value = '1.0';
-        this.layerGroups[key].scale.set(1, 1, 1);
-
-        // "Snap" them back
-        this.updateDummyNeuronConnections();
-        this.refreshConnectionVisibility();
-      });
-      sliderRow.appendChild(resetBtn);
-      layerContainer.appendChild(sliderRow);
-
-      // For all but the input layer, add toggles for MACs/CMs/Neurons
-      if (key !== this.inputGridKey) {
-        const toggleRow = document.createElement('div');
-        toggleRow.className = 'toggle-row';
-
-        // MACs checkbox
-        const macCheckbox = document.createElement('input');
-        macCheckbox.type = 'checkbox';
-        macCheckbox.id = `toggle-mac-${key}`;
-        macCheckbox.checked = true;
-        toggleRow.appendChild(macCheckbox);
-        const macLabel = document.createElement('label');
-        macLabel.htmlFor = `toggle-mac-${key}`;
-        macLabel.textContent = 'MACs';
-        toggleRow.appendChild(macLabel);
-
-        // CMs checkbox
-        const cmCheckbox = document.createElement('input');
-        cmCheckbox.type = 'checkbox';
-        cmCheckbox.id = `toggle-cm-${key}`;
-        cmCheckbox.checked = true;
-        toggleRow.appendChild(cmCheckbox);
-        const cmLabel = document.createElement('label');
-        cmLabel.htmlFor = `toggle-cm-${key}`;
-        cmLabel.textContent = 'CMs';
-        toggleRow.appendChild(cmLabel);
-
-        // Neurons checkbox
-        const neuronCheckbox = document.createElement('input');
-        neuronCheckbox.type = 'checkbox';
-        neuronCheckbox.id = `toggle-neuron-${key}`;
-        neuronCheckbox.checked = true;
-        toggleRow.appendChild(neuronCheckbox);
-        const neuronLabel = document.createElement('label');
-        neuronLabel.htmlFor = `toggle-neuron-${key}`;
-        neuronLabel.textContent = 'Neurons';
-        toggleRow.appendChild(neuronLabel);
-
-        layerContainer.appendChild(toggleRow);
-
-        // Attach event listeners for each checkbox
-        macCheckbox.addEventListener('change', () => {
-          const show = macCheckbox.checked;
-          if (this.layerGroups[key]) {
-            this.layerGroups[key].traverse(child => {
-              if (child.userData && child.userData.isMacVisual) {
-                child.visible = show;
-              }
-            });
-            if (show) {
-              this.layerGroups[key].traverse(child => {
-                if (child.userData && child.userData.type === 'mac'
-                    && !this.clickableMACs.includes(child)) {
-                  this.clickableMACs.push(child);
-                }
-              });
-            } else {
-              this.layerGroups[key].traverse(child => {
-                if (child.userData && child.userData.type === 'mac') {
-                  const idx = this.clickableMACs.indexOf(child);
-                  if (idx > -1) {
-                    this.clickableMACs.splice(idx, 1);
-                  }
-                }
-              });
-            }
-          }
-        });
-        cmCheckbox.addEventListener('change', () => {
-          const show = cmCheckbox.checked;
-          if (this.layerGroups[key]) {
-            this.layerGroups[key].traverse(child => {
-              if (child.userData && child.userData.type === 'cm') {
-                child.visible = show;
-              }
-            });
-          }
-        });
-        neuronCheckbox.addEventListener('change', () => {
-          const show = neuronCheckbox.checked;
-          if (this.layerGroups[key]) {
-            this.layerGroups[key].traverse(child => {
-              if (child.userData && child.userData.type === 'neuron') {
-                child.visible = show;
-              }
-            });
-          }
-        });
-      }
-      
-      // Append this layer container to the scaleContainer
-      scaleContainer.appendChild(layerContainer);
-
-      // Divider if not last layer
-      if (index < zKeys.length - 1) {
-        const divider = document.createElement('hr');
-        divider.className = 'slider-divider';
-        scaleContainer.appendChild(divider);
-      }
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0.1';
+    slider.max = '3.0';
+    slider.step = '0.05';
+    slider.value = '1.0';
+    slider.className = 'layer-slider';
+    slider.addEventListener('input', (evt) => {
+      const scaleVal = parseFloat(evt.target.value);
+      this.layerGroups[key].scale.set(scaleVal, scaleVal, scaleVal);
+      this.updateDummyNeuronConnections();
+      this.refreshConnectionVisibility();
     });
-  }
+    sliderRow.appendChild(slider);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'Reset';
+    resetBtn.className = 'slider-reset-btn';
+    resetBtn.addEventListener('click', () => {
+      slider.value = '1.0';
+      this.layerGroups[key].scale.set(1, 1, 1);
+      this.updateDummyNeuronConnections();
+      this.refreshConnectionVisibility();
+    });
+    sliderRow.appendChild(resetBtn);
+
+    layerContainer.appendChild(sliderRow);
+
+    // 3d) Toggles for MACs, CMs, Neurons (skip input layer)
+    if (key !== this.inputGridKey) {
+      const toggleRow = document.createElement('div');
+      toggleRow.className = 'toggle-row';
+
+      // Header
+      const prefix = document.createElement('span');
+      prefix.textContent = 'Show:';
+      prefix.className = 'toggle-prefix';
+      toggleRow.appendChild(prefix);
+
+      // -- MACs --
+      const macLabel = document.createElement('label');
+      macLabel.htmlFor = `toggle-mac-${key}`;
+      macLabel.textContent = 'MACs';
+      toggleRow.appendChild(macLabel);
+
+      const macCheckbox = document.createElement('input');
+      macCheckbox.type = 'checkbox';
+      macCheckbox.id = `toggle-mac-${key}`;
+      macCheckbox.checked = true;
+      toggleRow.appendChild(macCheckbox);
+
+      // -- CMs --
+      const cmLabel = document.createElement('label');
+      cmLabel.htmlFor = `toggle-cm-${key}`;
+      cmLabel.textContent = 'CMs';
+      toggleRow.appendChild(cmLabel);
+
+      const cmCheckbox = document.createElement('input');
+      cmCheckbox.type = 'checkbox';
+      cmCheckbox.id = `toggle-cm-${key}`;
+      cmCheckbox.checked = true;
+      toggleRow.appendChild(cmCheckbox);
+
+      // -- Neurons --
+      const neuronLabel = document.createElement('label');
+      neuronLabel.htmlFor = `toggle-neuron-${key}`;
+      neuronLabel.textContent = 'Neurons';
+      toggleRow.appendChild(neuronLabel);
+
+      const neuronCheckbox = document.createElement('input');
+      neuronCheckbox.type = 'checkbox';
+      neuronCheckbox.id = `toggle-neuron-${key}`;
+      neuronCheckbox.checked = true;
+      toggleRow.appendChild(neuronCheckbox);
+
+      // 3e) Event listeners (exactly your original logic)
+      macCheckbox.addEventListener('change', () => {
+        const show = macCheckbox.checked;
+        if (this.layerGroups[key]) {
+          this.layerGroups[key].traverse(child => {
+            if (child.userData && child.userData.isMacVisual) {
+              child.visible = show;
+            }
+          });
+          if (show) {
+            this.layerGroups[key].traverse(child => {
+              if (child.userData && child.userData.type === 'mac' && !this.clickableMACs.includes(child)) {
+                this.clickableMACs.push(child);
+              }
+            });
+          } else {
+            this.layerGroups[key].traverse(child => {
+              if (child.userData && child.userData.type === 'mac') {
+                const idx = this.clickableMACs.indexOf(child);
+                if (idx > -1) this.clickableMACs.splice(idx, 1);
+              }
+            });
+          }
+        }
+      });
+      cmCheckbox.addEventListener('change', () => {
+        const show = cmCheckbox.checked;
+        if (this.layerGroups[key]) {
+          this.layerGroups[key].traverse(child => {
+            if (child.userData && child.userData.type === 'cm') {
+              child.visible = show;
+            }
+          });
+        }
+      });
+      neuronCheckbox.addEventListener('change', () => {
+        const show = neuronCheckbox.checked;
+        if (this.layerGroups[key]) {
+          this.layerGroups[key].traverse(child => {
+            if (child.userData && child.userData.type === 'neuron') {
+              child.visible = show;
+            }
+          });
+        }
+      });
+
+      layerContainer.appendChild(toggleRow);
+    }
+
+    // Insert a divider _above_ every layer
+    const divider = document.createElement('hr');
+    divider.className = 'slider-divider';
+    scaleContainer.appendChild(divider);
+    
+    // Now append the layer’s controls
+    scaleContainer.appendChild(layerContainer);
+  });
+}
 
   /**
    * Attaches event listeners to the static Full Model Controls.
@@ -669,8 +688,15 @@ export class UIManager {
           });
         }
 
-        // 3) Re-check the layer toggles in the UI so the user sees that MACs are visible
+        // 2.5) Reset the slider UI positions
         const uniformControls = document.getElementById('uniform-layer-scales');
+        if (uniformControls) {
+          uniformControls
+            .querySelectorAll('input.layer-slider')
+            .forEach(slider => { slider.value = '1.0'; });
+        }
+
+        // 3) Re-check the layer toggles in the UI so the user sees that MACs are visible
         if (uniformControls) {
           // For each layer's MAC/CM/Neuron checkbox, set them to true
           const macCheckboxes = uniformControls.querySelectorAll('input[id^="toggle-mac-"]');
@@ -769,9 +795,11 @@ export class UIManager {
       }
       macGroup.userData.isSelected = false;
   
-      // Hide side-panel canvas if any
-      if (macGroup.userData.canvasWrapper) {
-        macGroup.userData.canvasWrapper.style.display = 'none';
+      // Remove the entire section (divider + canvas) when untoggling
+      if (macGroup.userData.canvasSection) {
+        macGroup.userData.canvasSection.remove();
+        macGroup.userData.canvasSection = null;
+        macGroup.userData.canvasWrapper = null;
       }
   
       // Remove from selectedMACs array
@@ -875,7 +903,7 @@ export class UIManager {
   
     const label = document.createElement('p');
     label.classList.add('mac-canvas-label');
-    label.textContent = `MAC Layer ${macGroup.userData.layerIndex}`;
+    label.textContent = `- MAC Layer ${macGroup.userData.layerIndex} -`;
     containerDiv.appendChild(label);
   
     const topCanvas = document.createElement('canvas');
@@ -899,11 +927,31 @@ export class UIManager {
     containerDiv.appendChild(barGraphScrollContainer);
   
     const sidePanel = document.getElementById('side-panel');
-    sidePanel.appendChild(containerDiv);
-  
+
+    // 1) Create a single “section” wrapper
+    const section = document.createElement('div');
+    section.className = 'mac-section';
+
+    // 2) If there’s already content, append the <hr> into *this* section
+    if (sidePanel.children.length > 0) {
+      const divider = document.createElement('hr');
+      divider.className = 'slider-divider';
+      section.appendChild(divider);
+    }
+
+    // 3) Move your existing containerDiv into that same section
+    section.appendChild(containerDiv);
+
+    // 4) Now append *only* the section
+    sidePanel.appendChild(section);
+
+    // 5) Remember the section (for removal later) and the wrapper
+    macGroup.userData.canvasSection = section;
+    macGroup.userData.canvasWrapper = containerDiv;
+
     this.createTopView(macGroup, topCanvas);
     this.renderBarGraph(macGroup, barGraphCanvas);
-  
+
     return containerDiv;
   }
   

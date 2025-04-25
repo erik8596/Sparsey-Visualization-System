@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="sparsey-visualization_presentation",
-    version="0.1",
+    name="sparseypy-svs",
+    version="1.4.8",
     packages=find_packages(),
 )

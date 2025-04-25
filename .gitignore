@@ -23,3 +23,5 @@ ruf/
 model/grid_utils.py
 
 src/web/static/js/explusion/
+
+data/artifact_store/
