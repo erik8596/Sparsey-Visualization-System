@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import json
 from src.core.model.wandb.wandb_facade import WandBFacade
 from typing import Tuple, Dict, List, Any
 
@@ -261,7 +262,7 @@ class WeightedConnectionsParser:
                         
                         # Validate source MAC index against previous layer's total MACs
                         if src_mac_flat_idx >= prev_dims["num_macs"]:
-                             print(f"Warning: Source MAC index {src_mac_flat_idx} out of bounds for layer {prev_layer_index} (num_macs: {prev_dims['num_macs']}). Dest: {layer_key}/{mac_key}. Skipping RF entry.")
+                            #  print(f"Warning: Source MAC index {src_mac_flat_idx} out of bounds for layer {prev_layer_index} (num_macs: {prev_dims['num_macs']}). Dest: {layer_key}/{mac_key}. Skipping RF entry.")
                              continue
 
                         # Iterate through Source Neurons within the connected Source MAC
