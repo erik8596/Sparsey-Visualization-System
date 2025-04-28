@@ -9,7 +9,7 @@ class MACActivationParser:
 
     def __init__(self):
         # Updated pattern to only match non-zero layer indices
-        self.mac_pattern = re.compile(r"^num_activations/layer_([1-9]\d*)/mac_(\d+)$")
+        self.mac_pattern = re.compile(r"^neuron_activations/layer_([1-9]\d*)/mac_(\d+)$")
 
     def parse(self, summary_data: Dict[str, Any]) -> Dict[str, Dict[int, int]]:
         """

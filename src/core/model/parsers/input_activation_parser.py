@@ -8,7 +8,7 @@ class InputActivationParser:
     """Parser specifically for input layer activations from WandB summary data"""
 
     def __init__(self):
-        self.pattern = re.compile(r"^num_activations/layer_0/mac_(\d+)$")
+        self.pattern = re.compile(r"^input_activations/pixel_(\d+)$")
 
     def parse(self, summary_data: Dict[str, any]) -> Dict[int, int]:
         """
