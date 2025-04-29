@@ -1,11 +1,14 @@
 from flask import Blueprint, jsonify
 from src.core.model.wandb.wandb_facade import WandBFacade
 from src.core.model.processors.layered_strategy import LayeredVisualizationStrategy
+from src.core.model.parsers.weight_connection_parser import WeightedConnectionsParser
+import os
 
 api = Blueprint('api', __name__, url_prefix='/api')
 
 wbf = WandBFacade() # singleton instance
 lvs = LayeredVisualizationStrategy()
+DATA_ARTIFACT_STORE_PATH = os.environ.get('DATA_ARTIFACT_STORE_PATH', "data/artifact_store")
 
 @api.route('/')
 def index():
@@ -147,6 +150,48 @@ def visualize(project_name, run_id):
         print(f"Error during visualization: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@api.route('/<project_name>/<run_id>/<int:step>/weight_connections', methods=['GET'])
+def get_weight_connections(project_name, run_id, step: int):
+    """
+    Fetches and parses weight connections for a specific run and step.
+    Uses caching and loads only the required artifact step from W&B if necessary.
+    """
+    try:
+        # 1. Set W&B Facade context to the correct run
+        #    First, ensure the facade knows about runs in this project
+        wbf.load_runs_from_project(project_name=project_name)
+        #    Then, attempt to update to the specific run
+        if not wbf.update_run(run_id=run_id, project_name=project_name):
+            return jsonify({"error": f"Run ID '{run_id}' not found in project '{project_name}'"}), 404
+
+        # 2. Ensure model configuration (layer/input dims) is loaded for the parser
+        model_config = wbf.get_processed_model_config(run_id=run_id, project_name=project_name)
+        if not model_config or not model_config.layers:
+             return jsonify({"error": "Failed to load model configuration for the run"}), 500
+        
+        # 3. Get the specific step data (loads from cache or W&B if needed)
+        # This method now loads the data into wbf.mconf.weighted_connections[step]
+        step_data = wbf.get_weighted_connections_for_step(step)
+        if step_data is None:
+            # Error message/reason is printed by the facade method
+            return jsonify({'error': f'Weighted connections for step {step} not found or could not be loaded.'}), 404
+
+        # 4. Initialize the parser (it will find config and step data in wbf.mconf)
+        wcp = WeightedConnectionsParser(wbf)
+
+        # 5. Parse the specific step data (already loaded into memory)
+        parsed_connections = wcp.parse(step)
+        return jsonify(parsed_connections)
+        
+    except ValueError as ve: # Catch specific expected errors from parser
+        print(f"API: Value error processing weight connections - {str(ve)}")
+        return jsonify({'error': f'Configuration or data error during parsing: {str(ve)}'}), 500
+            
+    except Exception as e:
+        print(f"API: Unexpected error fetching weight connections for step {step} - {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': "An internal error occurred"}), 500
 
 @api.route('/status', methods=['GET'])
 def get_status():
@@ -154,3 +199,4 @@ def get_status():
     Fetches a status of the current W&B project and run.
     """
     return jsonify(wbf.status())
+
