@@ -61,10 +61,14 @@ class ModelConfig:
             neuron_parser = NeuronActivationParser()
             input_parser = InputActivationParser()
 
-            mac_activations = mac_parser.parse(summary_data)
+            mac_activations = mac_parser.parse_from_history(run)
             neuron_activations = neuron_parser.parse_from_history(run)
-            input_activations = input_parser.parse(summary_data)
+            input_activations = input_parser.parse_from_history(run)
 
+            print("MAC activations from history:", mac_activations)
+            print("Neuron activations from history:", neuron_activations)
+            print("Input activations from history:", input_activations)
+            
             input_dimensions = self._get_input_dimensions(model_config)
 
             return ModelConfig(

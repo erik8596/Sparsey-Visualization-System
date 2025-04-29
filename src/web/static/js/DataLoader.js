@@ -19,7 +19,7 @@ export async function loadProjects() {
       } else {
           projectSelect.innerHTML = '<option value="" disabled selected>No projects available</option>';
       }
-      
+
       return data.projects;
   } catch (error) {
       console.error('Error loading projects:', error);
@@ -33,7 +33,7 @@ export async function loadRuns(project) {
     console.log("Loading runs for project:", project);
     const response = await fetch(`/api/${project}/runs`);
     const data = await response.json();
-    
+
     if (data.error) {
       throw new Error(data.error);
     }
@@ -41,7 +41,7 @@ export async function loadRuns(project) {
     console.log("Fetched runs data:", data);
     const runSelect = document.getElementById('runSelect');
     runSelect.innerHTML = '<option value="" disabled selected>Select a run</option>';
-    
+
     // Check if we have project_runs in the response and it's an array
     if (data.project_runs && Array.isArray(data.project_runs)) {
       data.project_runs.forEach(run => {
@@ -62,7 +62,7 @@ export async function loadRuns(project) {
     const runSelect = document.getElementById('runSelect');
     runSelect.innerHTML = '<option value="" disabled selected>Failed to load runs</option>';
     document.getElementById('visualizeButton').disabled = true;
-    
+
     // Show more informative error to user
     alert(`Failed to load runs: ${error.message}`);
   }
@@ -71,7 +71,7 @@ export async function loadRuns(project) {
 export async function loadRun() {
   // Clear any existing side-panel elements:
   // We'll just notify MacManager to do that if needed, or do it directly here:
-  // But let's do it in MacManager via an event if you prefer. 
+  // But let's do it in MacManager via an event if you prefer.
   eventBus.notify('clearSidePanel');
 
   const runDropdown = document.getElementById('runSelect');
@@ -91,8 +91,10 @@ export async function loadRun() {
     let response = await fetch(`/api/${project_name}/${run_id}/visualize`);
     let data = await response.json();
     console.log("Received visualization data:", data);
-
-    if (data.error) {
+    console.log("Raw data from server:", data);
+    console.log("Input activations structure:", data.input_activations);
+    console.log("MAC activations structure:", data.mac_activations);
+    
       alert("Error: " + data.error);
       return;
     }

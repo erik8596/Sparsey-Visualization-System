@@ -135,6 +135,10 @@ def visualize(project_name, run_id):
     """Fetches the visualization data for a specific run."""
     try:
         model_data = wbf.get_processed_model_config(run_id, project_name)
+        
+        print("Sending to client - MAC activations:", model_data.mac_activations)
+        print("Sending to client - Input activations:", model_data.input_activations)
+
         if not model_data or not model_data.layers:
             return jsonify({"error": "No model configuration data available"}), 500
 
@@ -168,7 +172,7 @@ def get_weight_connections(project_name, run_id, step: int):
         model_config = wbf.get_processed_model_config(run_id=run_id, project_name=project_name)
         if not model_config or not model_config.layers:
              return jsonify({"error": "Failed to load model configuration for the run"}), 500
-        
+
         # 3. Get the specific step data (loads from cache or W&B if needed)
         # This method now loads the data into wbf.mconf.weighted_connections[step]
         step_data = wbf.get_weighted_connections_for_step(step)
@@ -182,11 +186,11 @@ def get_weight_connections(project_name, run_id, step: int):
         # 5. Parse the specific step data (already loaded into memory)
         parsed_connections = wcp.parse(step)
         return jsonify(parsed_connections)
-        
+
     except ValueError as ve: # Catch specific expected errors from parser
         print(f"API: Value error processing weight connections - {str(ve)}")
         return jsonify({'error': f'Configuration or data error during parsing: {str(ve)}'}), 500
-            
+
     except Exception as e:
         print(f"API: Unexpected error fetching weight connections for step {step} - {str(e)}")
         import traceback
@@ -199,4 +203,3 @@ def get_status():
     Fetches a status of the current W&B project and run.
     """
     return jsonify(wbf.status())
-
