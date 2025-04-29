@@ -138,13 +138,99 @@ def visualize(project_name, run_id):
         if not model_data or not model_data.layers:
             return jsonify({"error": "No model configuration data available"}), 500
 
+        # Log model data components
+        print("\n=== MODEL DATA BEFORE PROCESSING ===")
+        print(f"- Has layers: {bool(model_data.layers)} ({len(model_data.layers) if model_data.layers else 0} layers)")
+        print(f"- Has input_activations: {bool(model_data.input_activations)} ({len(model_data.input_activations) if model_data.input_activations else 0} items)")
+        print(f"- Has MAC activations: {bool(model_data.mac_activations)} ({len(model_data.mac_activations) if model_data.mac_activations else 0} layers)")
+        print(f"- Has neuron activations: {bool(model_data.neuron_activations)} ({len(model_data.neuron_activations) if model_data.neuron_activations else 0} layers)")
+
+        # DEBUG: Show actual content of activation data
+        print("\n=== ACTIVATION DATA STRUCTURE ===")
+        print("Input activations format:", type(model_data.input_activations))
+        if model_data.input_activations:
+            print("Sample input activation:", next(iter(model_data.input_activations.items())))
+
+        print("\nMAC activations format:", type(model_data.mac_activations))
+        if model_data.mac_activations:
+            print("MAC activations keys:", list(model_data.mac_activations.keys())[:5])
+            layer_key = next(iter(model_data.mac_activations.keys()))
+            print(f"Sample MAC activation layer '{layer_key}':", next(iter(model_data.mac_activations[layer_key].items())))
+
+        print("\nNeuron activations format:", type(model_data.neuron_activations))
+        if model_data.neuron_activations:
+            print("Neuron activations keys:", list(model_data.neuron_activations.keys())[:5])
+
         visualization_data = lvs.process(
             model_data.layers,
             model_data.mac_activations,
             model_data.input_activations,
-            model_data.neuron_activations  # Pass neuron activations
+            model_data.neuron_activations
         )
-        return jsonify(visualization_data)
+
+        # After processing, check the actual structure of visualization_data
+        print("\n=== VISUALIZATION DATA STRUCTURE ===")
+        print("Top-level keys:", list(visualization_data.keys()))
+        if 'input_activations' in visualization_data:
+            print("Input activations type:", type(visualization_data['input_activations']))
+            print("Input activations content:", visualization_data['input_activations'])
+
+        # After processing, extract each type of activation into separate dictionaries
+        input_activations_dict = {}
+        mac_activations_dict = {}
+        neuron_activations_dict = {}
+
+        # Extract input activations
+        input_keys = [k for k in visualization_data.keys() if k.startswith('input_activations/')]
+        for key in input_keys:
+            input_activations_dict[key] = visualization_data[key]
+
+        # Extract MAC activations (using precise pattern to avoid confusion with neuron activations)
+        mac_keys = [k for k in visualization_data.keys() if k.startswith('neuron_activations/layer_')
+                    and '/mac_' in k and '/cm_' not in k]
+        for key in mac_keys:
+            mac_activations_dict[key] = visualization_data[key]
+
+        # Extract detailed neuron activations
+        detailed_neuron_keys = [k for k in visualization_data.keys()
+                               if k.startswith('neuron_activations/') and '/cm_' in k and '/neuron_' in k]
+        for key in detailed_neuron_keys:
+            neuron_activations_dict[key] = visualization_data[key]
+
+        # Log detailed information about each activation type
+        print("\n=== DATA SENT TO CLIENT (SEPARATED) ===")
+        print(f"- Input activations: {len(input_keys)} found")
+        if input_keys:
+            print(f"  Sample: {input_keys[0]} = {visualization_data[input_keys[0]]}")
+
+        print(f"- MAC activations: {len(mac_keys)} found")
+        if mac_keys:
+            print(f"  Sample: {mac_keys[0]} = {visualization_data[mac_keys[0]]}")
+
+        print(f"- Detailed neuron activations: {len(detailed_neuron_keys)} found")
+        if detailed_neuron_keys:
+            print(f"  Sample: {detailed_neuron_keys[0]} = {visualization_data[detailed_neuron_keys[0]]}")
+
+        print("=====================================\n")
+
+        # Create the response structure
+        response = {
+            "layers": visualization_data.get("layers", []),
+            "input_dimensions": visualization_data.get("input_dimensions", {}),
+            "input_activations": {}
+        }
+
+        # Extract input activations as a simple dictionary (pixel_id: value)
+        for key in input_keys:
+            # Convert keys like "input_activations/pixel_42" to just "42"
+            pixel_id = int(key.split('_')[-1])
+            response["input_activations"][pixel_id] = visualization_data[key]
+
+        # Add MAC and neuron activations with the correct key names (no _data suffix)
+        response["mac_activations"] = mac_activations_dict
+        response["neuron_activations"] = neuron_activations_dict
+
+        return jsonify(response)
 
     except Exception as e:
         print(f"Error during visualization: {str(e)}")
@@ -168,7 +254,7 @@ def get_weight_connections(project_name, run_id, step: int):
         model_config = wbf.get_processed_model_config(run_id=run_id, project_name=project_name)
         if not model_config or not model_config.layers:
              return jsonify({"error": "Failed to load model configuration for the run"}), 500
-        
+
         # 3. Get the specific step data (loads from cache or W&B if needed)
         # This method now loads the data into wbf.mconf.weighted_connections[step]
         step_data = wbf.get_weighted_connections_for_step(step)
@@ -182,11 +268,11 @@ def get_weight_connections(project_name, run_id, step: int):
         # 5. Parse the specific step data (already loaded into memory)
         parsed_connections = wcp.parse(step)
         return jsonify(parsed_connections)
-        
+
     except ValueError as ve: # Catch specific expected errors from parser
         print(f"API: Value error processing weight connections - {str(ve)}")
         return jsonify({'error': f'Configuration or data error during parsing: {str(ve)}'}), 500
-            
+
     except Exception as e:
         print(f"API: Unexpected error fetching weight connections for step {step} - {str(e)}")
         import traceback
@@ -199,4 +285,3 @@ def get_status():
     Fetches a status of the current W&B project and run.
     """
     return jsonify(wbf.status())
-

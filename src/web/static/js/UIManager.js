@@ -11,7 +11,7 @@ export class UIManager {
     this.raycaster = sceneManager.raycaster;
     this.mouse = sceneManager.mouse;
     this.sharedTopRenderer = sceneManager.sharedTopRenderer;
-    
+
     // Get elements defined in index.html.
     this.projectSelect       = document.getElementById('projectSelect');
     this.runSelect           = document.getElementById('runSelect');
@@ -48,7 +48,7 @@ export class UIManager {
     // Initialize static Full Model Controls.
     this.initializeFullModelControls();
   }
-  
+
   /**
    * Builds all layers from provided data.
    */
@@ -67,7 +67,7 @@ export class UIManager {
     this._connectionRefCounts = new Map(); // Clear reference counts
 
     const mac_spacing = 1.33;
-  
+
     // Group elements by layer and compute centers
     const layerGroupsObj = {};
     layers.forEach(element => {
@@ -87,7 +87,7 @@ export class UIManager {
       });
       layerCenters[layer] = { x: sumX / elements.length, y: sumY / elements.length };
     });
-  
+
     // Build mapping for layer spacing
     const zToIndexMap = {};
     zToIndexMap[this.inputGridKey] = 0;
@@ -96,14 +96,14 @@ export class UIManager {
       zToIndexMap[zVal] = idx + 1;
     });
     this.zToIndexMap = zToIndexMap;
-  
+
     // Build MAC composites
     layers.forEach(element => {
       if (element.type === 'mac') {
         const layerCenter = layerCenters[element.z];
         const layerIndex  = zToIndexMap[element.z] || 0;
         const macGroup    = this.macFactory.create(element, layerCenter, mac_spacing, layerIndex);
-  
+
         // Create or add to layer group
         if (!this.layerGroups[element.z]) {
           const layerGroup = new THREE.Group();
@@ -115,14 +115,14 @@ export class UIManager {
         this.clickableMACs.push(macGroup);
       }
     });
-  
+
     // Build CM objects
     layers.forEach(element => {
       if (element.type === 'cm') {
         const layerCenter = layerCenters[element.z];
         const obj = this.cmFactory.create(element, layerCenter, mac_spacing);
         obj.userData.layerIndex = zToIndexMap[element.z] || 0;
-  
+
         // Attach to nearest MAC if available
         const thisZ = element.z;
         let closestMac = null;
@@ -146,7 +146,7 @@ export class UIManager {
         }
       }
     });
-  
+
     // Build Neuron objects
     layers.forEach(element => {
       if (element.type === 'neuron') {
@@ -156,7 +156,7 @@ export class UIManager {
 
         // Keep track of all neurons
         this.allNeurons.push(obj);
-  
+
         // Attach to nearest MAC if available
         const thisZ = element.z;
         let closestMac = null;
@@ -181,7 +181,7 @@ export class UIManager {
         }
       }
     });
-  
+
     // Build input grid if provided
     if (inputDims && inputDims.width && inputDims.height) {
       this.createInputGrid(inputDims.width, inputDims.height, inputActivations);
@@ -193,10 +193,10 @@ export class UIManager {
       }
       this.layerGroups[this.inputGridKey].add(this.inputGridGroup);
     }
-  
+
     // Update dynamic individual layer controls
     this.updateUniformScaleSliders();
-  
+
     // Make sure controls are visible
     const uniformControls   = document.getElementById('uniform-layer-scales');
     const fullModelControls = document.getElementById('full-model-controls-box');
@@ -209,7 +209,7 @@ export class UIManager {
     // Initially refresh connection visibility (global + no MAC toggles yet)
     this.refreshConnectionVisibility();
   }
-  
+
   /**
    * Creates the input grid.
    */
@@ -219,7 +219,7 @@ export class UIManager {
     const hexSize = 2.0;
     const macSpacing = 3.0;
     const zOffset = 0;
-  
+
     for (let rowIdx = 0; rowIdx < rows; rowIdx++) {
       for (let colIdx = 0; colIdx < cols; colIdx++) {
         const x = colIdx * macSpacing;
@@ -315,7 +315,7 @@ export class UIManager {
 
     const layerA = neuronA.userData.layerIndex;
     const layerB = neuronB.userData.layerIndex;
-    
+
     let color;
     if (layerA < layerB) {
       // bottom-up
@@ -628,7 +628,7 @@ updateUniformScaleSliders() {
     const divider = document.createElement('hr');
     divider.className = 'slider-divider';
     scaleContainer.appendChild(divider);
-    
+
     // Now append the layer’s controls
     scaleContainer.appendChild(layerContainer);
   });
@@ -668,7 +668,7 @@ updateUniformScaleSliders() {
         this.layerSpacing = 10;
         if (layerSpacingSlider) layerSpacingSlider.value = '10';
         this.updateLayerSpacing();
-      
+
         // 2) Reset uniform scales & forcibly set all children visible
         //    Also re-add MACs to this.clickableMACs (so we can click them again)
         this.clickableMACs = []; // Clear the old array
@@ -731,7 +731,7 @@ updateUniformScaleSliders() {
       });
     }
   }
-  
+
   /**
    * Updates the z-position for layer groups using the current layerSpacing.
    */
@@ -765,7 +765,7 @@ updateUniformScaleSliders() {
       }
     }
   }
-  
+
   getMACGroup(object) {
     while (object) {
       if (this.clickableMACs.includes(object) && object.userData && object.userData.type === 'mac') {
@@ -775,17 +775,17 @@ updateUniformScaleSliders() {
     }
     return null;
   }
-  
+
   toggleMACSelection(macGroup) {
     const outlineLine = macGroup.userData.outlineLine;
-  
+
     function disableRaycast(obj) {
       obj.raycast = () => {};
       if (obj.children) {
         obj.children.forEach(child => disableRaycast(child));
       }
     }
-  
+
     // If it's already selected, we're toggling it OFF
     if (macGroup.userData.isSelected) {
       // Remove green "innerOutline" overlay
@@ -794,29 +794,29 @@ updateUniformScaleSliders() {
         macGroup.userData.innerOutline = null;
       }
       macGroup.userData.isSelected = false;
-  
+
       // Remove the entire section (divider + canvas) when untoggling
       if (macGroup.userData.canvasSection) {
         macGroup.userData.canvasSection.remove();
         macGroup.userData.canvasSection = null;
         macGroup.userData.canvasWrapper = null;
       }
-  
+
       // Remove from selectedMACs array
       const idx = this.selectedMACs.indexOf(macGroup);
       if (idx !== -1) {
         this.selectedMACs.splice(idx, 1);
       }
-  
+
       // **Revert outline to its original color** (instead of black)
       if (outlineLine && outlineLine.userData && outlineLine.userData.originalOutlineColor != null) {
         outlineLine.material.color.set(outlineLine.userData.originalOutlineColor);
       }
-  
+
       // Decrement connection refCounts for neurons in this MAC
       this.decrementConnectionRefCountForMac(macGroup);
       this.refreshConnectionVisibility();
-  
+
     } else {
       // Toggling MAC ON
       if (!macGroup.userData.canvasWrapper) {
@@ -824,7 +824,7 @@ updateUniformScaleSliders() {
       } else {
         macGroup.userData.canvasWrapper.style.display = 'block';
       }
-  
+
       // Create green "innerOutline" overlay
       const innerOutlineGeometry = outlineLine.geometry.clone();
       const innerOutlineMaterial = new THREE.LineBasicMaterial({ color: 0x08FF08, linewidth: 1 });
@@ -833,16 +833,16 @@ updateUniformScaleSliders() {
       disableRaycast(innerOutline);
       macGroup.add(innerOutline);
       macGroup.userData.innerOutline = innerOutline;
-  
+
       // Mark as selected
       macGroup.userData.isSelected = true;
       this.selectedMACs.push(macGroup);
-  
+
       // Increment connection refCounts for neurons in this MAC
       this.incrementConnectionRefCountForMac(macGroup);
       this.refreshConnectionVisibility();
     }
-    
+
     // Update MAC details display
     const layerIndex = macGroup.userData.layerIndex;
     const detailsDiv = document.getElementById('mac-details');
@@ -850,19 +850,19 @@ updateUniformScaleSliders() {
       detailsDiv.innerHTML = `<p><strong>Layer:</strong> ${layerIndex}</p>`;
     }
   }
-  
+
   resetToggledMACs() {
     // Turn off all selected MACs
     this.selectedMACs.forEach(macGroup => {
       if (macGroup.userData.isSelected) {
         macGroup.userData.isSelected = false;
-  
+
         // Remove the green "innerOutline" highlight
         if (macGroup.userData.innerOutline) {
           macGroup.remove(macGroup.userData.innerOutline);
           macGroup.userData.innerOutline = null;
         }
-  
+
         // Revert the MAC's base outline to its original color (red or blue)
         const outlineLine = macGroup.userData.outlineLine;
         if (outlineLine && outlineLine.userData && outlineLine.userData.originalOutlineColor) {
@@ -870,53 +870,53 @@ updateUniformScaleSliders() {
         }
       }
     });
-  
+
     // Clear the selectedMACs array
     this.selectedMACs = [];
-  
+
     // Clear MAC details
     const detailsDiv = document.getElementById("mac-details");
     if (detailsDiv) {
       detailsDiv.innerHTML = `<p><strong>Layer:</strong></p>`;
     }
     this.clearSidePanel();
-    
+
     // Remove references to the canvas
     this.clickableMACs.forEach(macGroup => {
       macGroup.userData.canvasWrapper = null;
     });
-  
+
     // Also reset all connection refcounts to 0
     for (const conn of this._dummyNeuronConnections) {
       this._connectionRefCounts.set(conn, 0);
     }
-  
+
     // Then finalize visibility
     this.refreshConnectionVisibility();
-  }  
+  }
 
   // ---------- MAC Canvas/Bar Graph stuff (unchanged) -----------------
 
   createMACCanvas(macGroup) {
     const containerDiv = document.createElement('div');
     containerDiv.classList.add('mac-canvas-wrapper');
-  
+
     const label = document.createElement('p');
     label.classList.add('mac-canvas-label');
     label.textContent = `- MAC Layer ${macGroup.userData.layerIndex} -`;
     containerDiv.appendChild(label);
-  
+
     const topCanvas = document.createElement('canvas');
     topCanvas.width = 200;
     topCanvas.height = 200;
     topCanvas.classList.add('mac-top-canvas');
     containerDiv.appendChild(topCanvas);
-  
+
     const barGraphLabel = document.createElement('p');
     barGraphLabel.classList.add('bar-graph-label');
     barGraphLabel.textContent = 'MAC Activation Probabilities:';
     containerDiv.appendChild(barGraphLabel);
-  
+
     const barGraphScrollContainer = document.createElement('div');
     barGraphScrollContainer.classList.add('bar-graph-scroll-container');
     const barGraphCanvas = document.createElement('canvas');
@@ -925,7 +925,7 @@ updateUniformScaleSliders() {
     barGraphCanvas.classList.add('bar-graph-canvas');
     barGraphScrollContainer.appendChild(barGraphCanvas);
     containerDiv.appendChild(barGraphScrollContainer);
-  
+
     const sidePanel = document.getElementById('side-panel');
 
     // 1) Create a single “section” wrapper
@@ -954,7 +954,7 @@ updateUniformScaleSliders() {
 
     return containerDiv;
   }
-  
+
   createTopView(macGroup, canvas) {
     if (!this.sharedTopRenderer) {
       console.error('Shared top renderer not initialized');
@@ -977,7 +977,7 @@ updateUniformScaleSliders() {
     compositeClone.scale.set(1.5, 1.5, 1.5);
     compositeClone.position.set(0, 0, 0);
     topScene.add(compositeClone);
-  
+
     try {
       const renderTarget = new THREE.WebGLRenderTarget(canvas.width, canvas.height);
       this.sharedTopRenderer.setRenderTarget(renderTarget);
@@ -1005,7 +1005,7 @@ updateUniformScaleSliders() {
       console.error('Error creating top view:', error);
     }
   }
-  
+
   renderBarGraph(macGroup, canvas) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1015,7 +1015,7 @@ updateUniformScaleSliders() {
     const gap = 8;
     const offsetX = 0;
     const maxBarHeight = canvas.height - 20;
-  
+
     sampleData.forEach((value, index) => {
       const barHeight = value * maxBarHeight;
       const x = offsetX + index * (fixedBarWidth + gap);
@@ -1030,7 +1030,7 @@ updateUniformScaleSliders() {
       ctx.fillText(index + 1, x + fixedBarWidth / 2, canvas.height - 2);
     });
   }
-  
+
   resetOutlineColor(group) {
     group.traverse(child => {
       if (child.isLine && child.material && child.material.color &&
@@ -1039,7 +1039,7 @@ updateUniformScaleSliders() {
       }
     });
   }
-  
+
   flipImageDataVertically(imageData) {
     const width = imageData.width;
     const height = imageData.height;
@@ -1054,7 +1054,7 @@ updateUniformScaleSliders() {
       imageData.data.set(temp, bottomOffset);
     }
   }
-  
+
   clearSidePanel() {
     const sidePanel = document.getElementById("side-panel");
     while (sidePanel.firstChild) {
@@ -1069,7 +1069,7 @@ updateUniformScaleSliders() {
       sidePanel.removeChild(child);
     }
   }
-  
+
   updateProjectDropdown(projects) {
     if (!this.projectSelect) {
       console.error('❌ projectSelect element not found!');
@@ -1086,7 +1086,7 @@ updateUniformScaleSliders() {
     this.runSelect.disabled = true;
     this.visualizeButton.disabled = true;
   }
-  
+
   updateRunDropdown(project_runs) {
     if (!this.runSelect) {
       console.error('Run select element not found!');
@@ -1108,12 +1108,12 @@ updateUniformScaleSliders() {
     this.runSelect.disabled = false;
     this.visualizeButton.disabled = false;
   }
-  
+
   showError(message) {
     console.error(message);
     alert(message);
   }
-  
+
   updateMACDetails(macData) {
     if (!macData) {
       this.macDetailsMsg.textContent = '(Click on a MAC to see its details)';
@@ -1122,31 +1122,31 @@ updateUniformScaleSliders() {
     this.macDetailsMsg.textContent =
       `MAC ID: ${macData.id}
        Layer: ${macData.layer}
-       Position: (${macData.position.x.toFixed(4)}, 
-                   ${macData.position.y.toFixed(4)}, 
+       Position: (${macData.position.x.toFixed(4)},
+                   ${macData.position.y.toFixed(4)},
                    ${macData.position.z.toFixed(4)})`;
   }
-  
+
   clearBottomPanel() {
     while (this.bottomPanelContainer.firstChild) {
       this.bottomPanelContainer.removeChild(this.bottomPanelContainer.firstChild);
     }
   }
-  
+
   addSidePanelCanvas(canvas) {
     this.sidePanelContainer.appendChild(canvas);
   }
-  
+
   toggleSidePanel() {
     const panel = document.getElementById('left-side-panel');
     if (!panel) return;
     panel.classList.toggle('collapsed');
   }
-  
+
   addBottomPanelCanvas(canvas) {
     this.bottomPanelContainer.appendChild(canvas);
   }
-  
+
   drawHexagon(shape, size) {
     for (let i = 0; i < 6; i++) {
       let angle = (Math.PI / 3) * i;

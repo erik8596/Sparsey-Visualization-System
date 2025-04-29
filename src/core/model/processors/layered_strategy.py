@@ -30,11 +30,35 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
                 self._process_layer(idx, layer_name, layer_dict, mac_activations, layer_neuron_activations)
             )
 
-        return {
+        # Initialize the result with the base visualization data
+        result = {
             "layers": visualization_data,
-            "input_dimensions": self._get_input_dimensions(model_config),
-            "input_activations": input_activations or {}
+            "input_dimensions": self._get_input_dimensions(model_config)
         }
+
+        # Format input activations with the expected key pattern
+        if input_activations:
+            for pixel_idx, activation in input_activations.items():
+                result[f"input_activations/pixel_{pixel_idx}"] = activation
+
+        # Format MAC activations with the expected key pattern
+        if mac_activations:
+            for layer_name, layer_activations in mac_activations.items():
+                for mac_idx, activation in layer_activations.items():
+                    result[f"neuron_activations/{layer_name}/mac_{mac_idx}"] = activation
+
+        # Format detailed neuron activations
+        if neuron_activations:
+            for layer_name, layer_data in neuron_activations.items():
+                for mac_idx, mac_data in layer_data.items():
+                    for cm_idx, cm_data in mac_data.items():
+                        for neuron_idx, neuron_history in cm_data.items():
+                            if neuron_history:
+                                # Use the latest activation value
+                                latest_value = neuron_history[-1]
+                                result[f"neuron_activations/{layer_name}/mac_{mac_idx}/cm_{cm_idx}/neuron_{neuron_idx}"] = latest_value
+
+        return result
 
     def _process_layer(self, idx: int, layer_name: str, layer_dict: Dict[str, Any],
                       mac_activations: Dict[str, Dict[int, int]],
@@ -123,10 +147,13 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
 
             if neuron_history:
                 # Get latest state (most recent value in the history)
-                is_active = neuron_history[-1] == 1.0  # Explicitly check for 1.0
-                raw_activation = float(neuron_history[-1])
-                # Calculate average activation
-                avg_activation = float(sum(neuron_history) / len(neuron_history))
+                latest = neuron_history[-1]
+                # Check if active (==1) and handle NaN values
+                is_active = (latest == 1.0) if not np.isnan(latest) else False
+                raw_activation = float(latest) if not np.isnan(latest) else 0.0
+                # Calculate average activation (skip NaN values)
+                valid_values = [v for v in neuron_history if not np.isnan(v)]
+                avg_activation = float(sum(valid_values) / len(valid_values)) if valid_values else 0.0
 
             neuron = self.neuron_factory.create_component(
                 neuron_pos[0], neuron_pos[1], z,
