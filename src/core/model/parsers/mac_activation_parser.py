@@ -1,3 +1,5 @@
+# src/core/model/parsers/mac_activation_parser.py
+
 import re
 from typing import Dict, Any
 import logging
@@ -5,38 +7,85 @@ import logging
 logger = logging.getLogger(__name__)
 
 class MACActivationParser:
-    """Parser for MAC activations (excluding input layer) from WandB summary data"""
+    """
+    Parser for MAC activations, supporting both:
+      - legacy summary-based proportions (num_activations)
+      - history-based binary flags (neuron_activations)
+    """
 
     def __init__(self):
-        # Updated pattern to only match non-zero layer indices
-        self.mac_pattern = re.compile(r"^num_activations/layer_([1-9]\d*)/mac_(\d+)$")
+        # Legacy summary pattern (proportion of active neurons)
+        self._summ_pattern = re.compile(r"^num_activations/layer_(\d+)/mac_(\d+)$")
+        # History pattern for true on/off flags per MAC
+        self._hist_pattern = re.compile(r"^neuron_activations/layer_(\d+)/mac_(\d+)$")
 
     def parse(self, summary_data: Dict[str, Any]) -> Dict[str, Dict[int, int]]:
         """
-        Parse MAC activations from summary data (excluding input layer).
+        Parse summary-based MAC activation proportions.
+
+        Returns a mapping:
+          {
+            "layer_1": { 0: 0, 1: 1, 2: 0, … },
+            "layer_2": { … }
+          }
+        where values are int(proportion) (floored to 0 or 1).
+        """
+        mac_acts: Dict[str, Dict[int, int]] = {}
+        try:
+            for key, val in summary_data.items():
+                match = self._summ_pattern.match(key)
+                if not match:
+                    continue
+                layer_idx, mac_idx = match.groups()
+                layer = f"layer_{layer_idx}"
+                idx   = int(mac_idx)
+                # cast proportion to int (0 or >0 → 1)
+                mac_acts.setdefault(layer, {})[idx] = 1 if float(val) > 0 else 0
+        except Exception as e:
+            logger.error(f"Error parsing summary-based MAC activations: {e}")
+        return mac_acts
+
+    def parse_from_history(
+        self,
+        history: Dict[int, Dict[str, Any]],
+        step: int = None
+    ) -> Dict[str, Dict[int, int]]:
+        """
+        Extract binary MAC activation flags from per-step history.
+
+        Looks for keys:
+          "neuron_activations/layer_<L>/mac_<M>" → value 0 or 1
 
         Args:
-            summary_data: WandB summary data containing MAC activations
+          history: mapping of step index → metrics dict
+          step:    specific step to use; if None, uses the smallest key
 
         Returns:
-            Dictionary of MAC activations by layer and MAC index
+          {
+            "layer_1": { 0: 0, 1: 1, 2: 0, … },
+            "layer_2": { … }
+          }
         """
-        mac_activations = {}
-
         try:
-            for key, value in summary_data.items():
-                if match := self.mac_pattern.match(key):
-                    layer_idx, mac_idx = match.groups()
-                    mac_idx = int(mac_idx)
-                    layer_name = f"layer_{layer_idx}"
+            if not history:
+                return {}
 
-                    if layer_name not in mac_activations:
-                        mac_activations[layer_name] = {}
+            chosen_step = step if step is not None else min(history.keys())
+            step_data   = history.get(chosen_step, {})
 
-                    mac_activations[layer_name][mac_idx] = int(value)
+            mac_map: Dict[str, Dict[int, int]] = {}
+            for key, val in step_data.items():
+                match = self._hist_pattern.match(key)
+                if not match:
+                    continue
+                layer_idx, mac_idx = match.groups()
+                layer = f"layer_{layer_idx}"
+                idx   = int(mac_idx)
+                # val is typically 0 or 1
+                mac_map.setdefault(layer, {})[idx] = 1 if val else 0
 
-            return mac_activations
+            return mac_map
 
         except Exception as e:
-            logger.error(f"Error parsing MAC activations: {e}")
+            logger.error(f"Error parsing history-based MAC activations at step {step}: {e}")
             return {}

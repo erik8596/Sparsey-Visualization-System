@@ -2,6 +2,9 @@ from flask import Blueprint, jsonify
 from src.core.model.wandb.wandb_facade import WandBFacade
 from src.core.model.processors.layered_strategy import LayeredVisualizationStrategy
 from src.core.model.parsers.weight_connection_parser import WeightedConnectionsParser
+from src.core.model.parsers.mac_activation_parser import MACActivationParser
+from src.core.model.parsers.input_activation_parser import InputActivationParser
+
 import os
 
 api = Blueprint('api', __name__, url_prefix='/api')
@@ -130,33 +133,43 @@ def get_run_history(project_name, run_id):
         print(f"API: Error fetching run history - {str(e)}")
         return jsonify({'error': str(e), 'history': []}), 500
 
+
 @api.route('/<project_name>/<run_id>/visualize', methods=['GET'])
 def visualize(project_name, run_id):
-    """Fetches the visualization data for a specific run."""
+    """
+    Fetches the visualization data for a specific run, but now with
+    MAC activations pulled from step 0 of the run history.
+    """
     try:
-        # 1) Fetch config + dimensions + activations from WandBFacade
+        # 1) Load the static model config (layers, dims, legacy activations)
         model_data = wbf.get_processed_model_config(run_id, project_name)
         if not model_data or not model_data.layers:
             return jsonify({"error": "No model configuration data available"}), 500
 
-        # 2) Also fetch run history for input-layer pixels
+        # 2) Fetch the full run history once
         history = wbf.fetch_run_history(run_id=run_id, project_name=project_name)
-        from src.core.model.parsers.input_activation_parser import InputActivationParser
-        parser = InputActivationParser()
-        input_acts = parser.parse_from_history(history, step=0)
 
-        # 3) Produce the final payload, injecting our history-parsed pixels
+        # 3) Override MAC activations with step-0 values
+        mac_parser      = MACActivationParser()
+        mac_acts_step0  = mac_parser.parse_from_history(history, step=0)
+        model_data.mac_activations = mac_acts_step0
+
+        # 4) (Also update input activations from history if you like)
+        input_parser       = InputActivationParser()
+        input_acts_step0   = input_parser.parse_from_history(history, step=0)
+        model_data.input_activations = input_acts_step0
+
+        # 5) Finally hand off to your Three.js strategy
         visualization_data = lvs.process(
             model_data.layers,
             model_data.mac_activations,
-            input_acts,
+            model_data.input_activations,
             model_data.neuron_activations
         )
-        
         return jsonify(visualization_data)
 
     except Exception as e:
-        print(f"Error during visualization: {str(e)}")
+        print(f"Error during visualization: {e}")
         return jsonify({"error": str(e)}), 500
 
 @api.route('/<project_name>/<run_id>/<int:step>/weight_connections', methods=['GET'])
