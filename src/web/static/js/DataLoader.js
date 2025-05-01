@@ -5,26 +5,26 @@ import { eventBus } from './app.js';
 
 export async function loadProjects() {
   try {
-      const response = await fetch('/api/projects');
-      const data = await response.json();
-      // clear and populate the projects dropdown
-      projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
-      if (data.projects && data.projects.length > 0) {
-          data.projects.forEach(project => {
-              const option = document.createElement('option');
-              option.value = project;
-              option.textContent = project;
-              projectSelect.appendChild(option);
-          });
-      } else {
-          projectSelect.innerHTML = '<option value="" disabled selected>No projects available</option>';
-      }
+    const response = await fetch('/api/projects');
+    const data = await response.json();
+    // clear and populate the projects dropdown
+    projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
+    if (data.projects && data.projects.length > 0) {
+      data.projects.forEach(project => {
+        const option = document.createElement('option');
+        option.value = project;
+        option.textContent = project;
+        projectSelect.appendChild(option);
+      });
+    } else {
+      projectSelect.innerHTML = '<option value="" disabled selected>No projects available</option>';
+    }
 
-      return data.projects;
+    return data.projects;
   } catch (error) {
-      console.error('Error loading projects:', error);
-      projectSelect.innerHTML = '<option value="" disabled selected>Error loading projects</option>';
-      return [];
+    console.error('Error loading projects:', error);
+    projectSelect.innerHTML = '<option value="" disabled selected>Error loading projects</option>';
+    return [];
   }
 }
 
@@ -69,9 +69,7 @@ export async function loadRuns(project) {
 }
 
 export async function loadRun() {
-  // Clear any existing side-panel elements:
-  // We'll just notify MacManager to do that if needed, or do it directly here:
-  // But let's do it in MacManager via an event if you prefer.
+  // Clear any existing side-panel elements
   eventBus.notify('clearSidePanel');
 
   const runDropdown = document.getElementById('runSelect');
@@ -79,32 +77,23 @@ export async function loadRun() {
     alert("Please select a run!");
     return;
   }
+
   const selectedOption = runDropdown.options[runDropdown.selectedIndex];
   const run_id = selectedOption.value;
   const project_name = document.getElementById('projectSelect').value;
-  if (!run_id) {
-    alert("No run selected!");
+
+  if (!run_id || !project_name) {
+    alert("No project or run selected!");
     return;
   }
 
   try {
-    let response = await fetch(`/api/${project_name}/${run_id}/visualize`);
-    let data = await response.json();
-    console.log("Received visualization data:", data);
-    console.log("Raw data from server:", data);
-    console.log("Input activations structure:", data.input_activations);
-    console.log("MAC activations structure:", data.mac_activations);
+    // Use window.loadSteps instead of loadSteps directly
+    await window.loadSteps(project_name, run_id);
 
-    if (data.error) {
-      alert("Error: " + data.error);
-      return;
-    }
-
-    // Publish an event with the new data, so MacManager can rebuild the scene
-    eventBus.notify('newVisualizationData', data);
-
+    // The rest of the visualization will happen via the step selection
   } catch (error) {
-    console.error("Error during visualization:", error);
+    console.error("Error loading run:", error);
     alert("Failed to visualize the run.");
   }
 }

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,20 +8,18 @@
   <!-- Three.js Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <!-- Google Fonts for Inter, IBM Plex Sans, Source Sans Pro & Fira Code -->
-  <link
-    href="https://fonts.googleapis.com/css2?
+  <link href="https://fonts.googleapis.com/css2?
       family=Inter:wght@400;500;600;700&
       family=IBM+Plex+Sans:wght@400;500;600;700&
       family=Source+Sans+Pro:wght@400;600;700&
       family=Fira+Code:wght@400;500;700&
-      display=swap"
-    rel="stylesheet"
-  />
+      display=swap" rel="stylesheet" />
   <!-- OrbitControls for Three.js -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
   <!-- Custom CSS -->
   <link rel="stylesheet" href="/static/css/styles.css" />
 </head>
+
 <body class="panel-closed-1 panel-closed-2">
   <header>
     <h1>The Sparsey Visualization System</h1>
@@ -65,7 +64,7 @@
         </div>
         <div class="slider-group">
           <label for="weightedConnectionsCheckbox" class="slider-label">
-             Show All Weighted Connections:
+            Show All Weighted Connections:
           </label>
           <input type="checkbox" id="weightedConnectionsCheckbox" />
         </div>
@@ -74,13 +73,8 @@
     </div>
 
     <!-- Toggle for Panel 1 -->
-    <button
-      id="toggle-panel-btn-1"
-      class="toggle-button toggle-with-text"
-      title="Controls"
-      aria-label="Open Controls Panel"
-      style="bottom: 30px; left: 0;"
-    >
+    <button id="toggle-panel-btn-1" class="toggle-button toggle-with-text" title="Controls"
+      aria-label="Open Controls Panel" style="bottom: 30px; left: 0;">
       <span class="toggle-icon">☰</span>
       <span class="toggle-text">Controls</span>
     </button>
@@ -88,23 +82,25 @@
     <!-- Panel 2 -->
     <div id="left-side-panel-2" class="collapsed side-panel">
       <div class="side-panel-box">
-        <h4>Choose an Input</h4>
-        <select id="inputSelect" size="20">
-          <!-- JS will inject <option>1 … 100</option> here -->
+        <h4>Step Selection</h4>
+        <div class="step-controls">
+          <span id="currentStepDisplay">No step selected</span>
+          <div class="step-navigation">
+            <button id="prevStepBtn" class="step-nav-btn" disabled>&lt; Previous</button>
+            <button id="nextStepBtn" class="step-nav-btn" disabled>Next &gt;</button>
+          </div>
+        </div>
+        <select id="stepSelect" size="20">
+          <option value="" disabled selected>Loading steps...</option>
         </select>
       </div>
     </div>
 
     <!-- Toggle for Panel 2 -->
-    <button
-      id="toggle-panel-btn-2"
-      class="toggle-button toggle-with-text"
-      title="Input"
-      aria-label="Open Input Panel"
-      style="bottom: 80px; left: 0;"
-    >
+    <button id="toggle-panel-btn-2" class="toggle-button toggle-with-text" title="Steps" aria-label="Open Steps Panel"
+      style="bottom: 80px; left: 0;">
       <span class="toggle-icon">☰</span>
-      <span class="toggle-text">Inputs</span>
+      <span class="toggle-text">Steps</span>
     </button>
 
     <!-- Three.js Scene Container -->
@@ -136,24 +132,104 @@
         body.classList.toggle('panel-closed-2', !open);
       });
 
-      // === NEW: populate the inputSelect ===
-      const inputSelect = document.getElementById('inputSelect');
-      if (inputSelect) {
-        // Create 100 dummy inputs
-        for (let i = 1; i <= 100; i++) {
-          const opt = document.createElement('option');
-          opt.value = i;
-          opt.textContent = `Input ${i}`;
-          inputSelect.appendChild(opt);
-        }
+      // Step navigation buttons (will be enabled once steps are loaded)
+      const prevStepBtn = document.getElementById('prevStepBtn');
+      const nextStepBtn = document.getElementById('nextStepBtn');
 
-        // (Optional) handle selection events
-        inputSelect.addEventListener('change', (e) => {
-          console.log('User selected input ID:', e.target.value);
-          // TODO: wire up behavior when you have real inputs
+      if (prevStepBtn && nextStepBtn) {
+        prevStepBtn.addEventListener('click', () => {
+          if (window.currentStepIndex > 0) {
+            selectStep(window.steps[window.currentStepIndex - 1]);
+          }
+        });
+
+        nextStepBtn.addEventListener('click', () => {
+          if (window.currentStepIndex < window.steps.length - 1) {
+            selectStep(window.steps[window.currentStepIndex + 1]);
+          }
         });
       }
+
+      // Global function to update steps
+      window.updateStepsUI = function (steps) {
+        window.steps = steps || [];
+        const stepSelect = document.getElementById('stepSelect');
+        const currentStepDisplay = document.getElementById('currentStepDisplay');
+
+        if (!stepSelect) return;
+
+        // Clear existing options
+        stepSelect.innerHTML = '';
+
+        if (steps && steps.length > 0) {
+          // Add all steps to the dropdown
+          steps.forEach((step) => {
+            const option = document.createElement('option');
+            option.value = step;
+            option.textContent = `Step ${step}`;
+            stepSelect.appendChild(option);
+          });
+
+          // Set event listener
+          stepSelect.addEventListener('change', (e) => {
+            const selectedStep = parseInt(e.target.value);
+            selectStep(selectedStep);
+          });
+
+          // Update UI state
+          window.currentStepIndex = 0;
+          currentStepDisplay.textContent = `Step ${steps[0]} of ${steps.length}`;
+          prevStepBtn.disabled = true;
+          nextStepBtn.disabled = steps.length <= 1;
+        } else {
+          // No steps available
+          const option = document.createElement('option');
+          option.value = "";
+          option.disabled = true;
+          option.selected = true;
+          option.textContent = "No steps available";
+          stepSelect.appendChild(option);
+
+          currentStepDisplay.textContent = "No steps available";
+          prevStepBtn.disabled = true;
+          nextStepBtn.disabled = true;
+        }
+      };
+
+      // Function to select a step
+      function selectStep(step) {
+        const stepSelect = document.getElementById('stepSelect');
+        const currentStepDisplay = document.getElementById('currentStepDisplay');
+        const prevStepBtn = document.getElementById('prevStepBtn');
+        const nextStepBtn = document.getElementById('nextStepBtn');
+
+        if (!window.steps || window.steps.length === 0) return;
+
+        // Update selected step in dropdown
+        if (stepSelect) stepSelect.value = step;
+
+        // Set current step index
+        window.currentStepIndex = window.steps.indexOf(step);
+
+        // Update navigation buttons
+        if (prevStepBtn) prevStepBtn.disabled = window.currentStepIndex <= 0;
+        if (nextStepBtn) nextStepBtn.disabled = window.currentStepIndex >= window.steps.length - 1;
+
+        // Update display
+        if (currentStepDisplay) {
+          currentStepDisplay.textContent = `Step ${step} of ${window.steps.length}`;
+        }
+
+        // Trigger step fetch if we have a function to do that
+        if (typeof window.fetchStepData === 'function') {
+          window.fetchStepData(step);
+        }
+      }
+
+      // Initialize with empty steps until data is loaded
+      window.updateStepsUI([]);
     });
   </script>
 </body>
+
 </html>

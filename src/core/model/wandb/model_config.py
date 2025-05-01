@@ -50,25 +50,35 @@ class ModelConfig:
 
         return {"width": width, "height": height}
 
-    def get_model_config(self, run) -> 'ModelConfig':
-        """Fetch and process model configuration, input dimensions, and activations."""
+    def get_model_config(self, run, step=None) -> 'ModelConfig':
+        """
+        Fetch and process model configuration, input dimensions, and activations.
+
+        Args:
+            run: The WandB run object
+            step (int, optional): Specific step to fetch activations for. Defaults to None (latest).
+
+        Returns:
+            ModelConfig: Populated config object with activations for the requested step
+        """
         try:
             model_config = self._extract_model_config(run)
             summary_data = getattr(run, "summary", {})
 
-            # Use parsers to get activation data
+            # Use parsers to get activation data for the specified step
             mac_parser = MACActivationParser()
             neuron_parser = NeuronActivationParser()
             input_parser = InputActivationParser()
 
-            mac_activations = mac_parser.parse_from_history(run)
-            neuron_activations = neuron_parser.parse_from_history(run)
-            input_activations = input_parser.parse_from_history(run)
+            # Pass the step parameter to all parsers
+            mac_activations = mac_parser.parse_from_history(run, step=step)
+            neuron_activations = neuron_parser.parse_from_history(run, step=step)
+            input_activations = input_parser.parse_from_history(run, step=step)
 
-            print("MAC activations from history:", mac_activations)
-            print("Neuron activations from history:", neuron_activations)
-            print("Input activations from history:", input_activations)
-            
+            print(f"Step {step} - MAC activations from history:", mac_activations)
+            print(f"Step {step} - Neuron activations from history:", neuron_activations)
+            print(f"Step {step} - Input activations from history:", input_activations)
+
             input_dimensions = self._get_input_dimensions(model_config)
 
             return ModelConfig(
@@ -80,6 +90,6 @@ class ModelConfig:
             )
 
         except Exception as e:
-            logger.error(f"Error fetching model config for run {run.id}: {str(e)}")
+            logger.error(f"Error fetching model config for run {run.id}, step {step}: {str(e)}")
             print(f"Full error: {str(e)}")
             return ModelConfig()

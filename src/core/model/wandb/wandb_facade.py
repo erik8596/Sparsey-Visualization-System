@@ -282,23 +282,34 @@ class WandBFacade:
             self.run = None
             self._handle_api_error("run fetching", e)
 
-    def get_processed_model_config(self, run_id: str = None, project_name: str = None, entity_name: str = None) -> Optional[ModelConfig]:
-        """Fetch processed model configuration and input dimensions."""
+    def get_processed_model_config(self, run_id: str = None, project_name: str = None, entity_name: str = None, step: int = None) -> Optional[ModelConfig]:
+        """
+        Fetch processed model configuration and input dimensions for a specific step.
+
+        Args:
+            run_id (str, optional): ID of run to fetch. Defaults to current run.
+            project_name (str, optional): Project name. Defaults to current project.
+            entity_name (str, optional): Entity name. Defaults to current entity.
+            step (int, optional): Step to fetch activations for. Defaults to None (latest step).
+
+        Returns:
+            Optional[ModelConfig]: Processed model config for the specified step, or None if error.
+        """
         # Get run object, using cached run if possible
         run = self.run if (run_id == self.run_id) else self.fetch_run(
             run_id or self.run_id,
             project_name or self.project_name,
-        entity_name or self.entity
+            entity_name or self.entity
         )
 
         try:
-            # Get the new model config instance
-            processed_config = self.mconf.get_model_config(run)
+            # Get the new model config instance, passing the step parameter
+            processed_config = self.mconf.get_model_config(run, step=step)
             # Update the facade's internal mconf instance
             self.mconf = processed_config
             return processed_config # Return the updated config
         except ValueError as e:
-            print(f"Error loading model config in facade: {e}")
+            print(f"Error loading model config in facade for step {step}: {e}")
             return None
 
     def fetch_run_history(self, run_id: str = None, project_name: str = None, entity_name: str = None) -> List[Dict[str, Any]]:

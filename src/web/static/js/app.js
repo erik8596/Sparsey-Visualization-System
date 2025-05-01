@@ -168,3 +168,67 @@ eventBus.subscribe('newVisualizationData', (data) => {
 eventBus.subscribe('clearSidePanel', () => {
   uiManager.clearSidePanel();
 });
+
+/*************************************************
+ * STEP DATA FETCHING
+ *************************************************/
+
+// Global function to fetch step data from the server
+window.fetchStepData = async function (step) {
+  const projectSelect = document.getElementById('projectSelect');
+  const runSelect = document.getElementById('runSelect');
+
+  if (!projectSelect || !runSelect) return;
+
+  const projectName = projectSelect.value;
+  const runId = runSelect.value;
+
+  if (!projectName || !runId) return;
+
+  try {
+    console.log(`Fetching data for step ${step}...`);
+    const response = await fetch(`/api/${projectName}/${runId}/visualize?step=${step}`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(`Received data for step ${step}`);
+
+    // Process the visualization data using your existing handler
+    eventBus.notify('newVisualizationData', data);
+
+  } catch (error) {
+    console.error("Error fetching step data:", error);
+  }
+};
+
+// Function to fetch available steps for a run
+window.loadSteps = async function(projectName, runId) {
+  try {
+    const response = await fetch(`/api/${projectName}/${runId}/steps`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.steps && Array.isArray(data.steps)) {
+      console.log(`Loaded ${data.steps.length} steps`);
+      window.updateStepsUI(data.steps);
+
+      // If steps are available, load the first one
+      if (data.steps.length > 0) {
+        window.fetchStepData(data.steps[0]);
+      }
+    } else {
+      console.error("No steps data available");
+      window.updateStepsUI([]);
+    }
+  } catch (error) {
+    console.error("Error loading steps:", error);
+    window.updateStepsUI([]);
+  }
+}

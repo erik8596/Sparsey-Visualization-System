@@ -1,8 +1,9 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from src.core.model.wandb.wandb_facade import WandBFacade
 from src.core.model.processors.layered_strategy import LayeredVisualizationStrategy
 from src.core.model.parsers.weight_connection_parser import WeightedConnectionsParser
 import os
+import pandas as pd
 
 api = Blueprint('api', __name__, url_prefix='/api')
 
@@ -134,12 +135,16 @@ def get_run_history(project_name, run_id):
 def visualize(project_name, run_id):
     """Fetches the visualization data for a specific run."""
     try:
-        model_data = wbf.get_processed_model_config(run_id, project_name)
+        # Get the step parameter from the request (defaults to None which will use the latest step)
+        step = request.args.get('step', default=None, type=int)
 
-        #print neurons for debugging
-        print("Sending to client - Neuron activations:", model_data.neuron_activations)
-        print("Sending to client - MAC activations:", model_data.mac_activations)
-        print("Sending to client - Input activations:", model_data.input_activations)
+        # Pass the step parameter to get_processed_model_config
+        model_data = wbf.get_processed_model_config(run_id, project_name, step=step)
+
+        #print neurons for debugging - include step information
+        print(f"Sending to client - Step {step} - Neuron activations:", model_data.neuron_activations)
+        print(f"Sending to client - Step {step} - MAC activations:", model_data.mac_activations)
+        print(f"Sending to client - Step {step} - Input activations:", model_data.input_activations)
 
         if not model_data or not model_data.layers:
             return jsonify({"error": "No model configuration data available"}), 500
@@ -150,6 +155,10 @@ def visualize(project_name, run_id):
             model_data.input_activations,
             model_data.neuron_activations  # Pass neuron activations
         )
+
+        # Add the step to the response so the frontend knows which step was processed
+        visualization_data['current_step'] = step
+
         return jsonify(visualization_data)
 
     except Exception as e:
@@ -198,6 +207,44 @@ def get_weight_connections(project_name, run_id, step: int):
         import traceback
         traceback.print_exc()
         return jsonify({'error': "An internal error occurred"}), 500
+
+@api.route('/<project_name>/<run_id>/steps', methods=['GET'])
+def get_steps(project_name, run_id):
+    """
+    Fetches all available steps for a specific run.
+    """
+    try:
+        # Fetch the run
+        run = wbf.fetch_run(
+            run_id=run_id,
+            project_name=project_name,
+        )
+
+        if not run:
+            print(f"API: Run not found - {run_id}")
+            return jsonify({'error': 'Run not found', 'steps': []}), 404
+
+        # Get history data
+        history = run.scan_history()
+        df = pd.DataFrame(history)
+
+        if df.empty:
+            print("API: No history data available")
+            return jsonify({'steps': []})
+
+        # Extract steps
+        if '_step' in df.columns:
+            steps = df['_step'].tolist()
+        else:
+            # If no specific step column, use indices
+            steps = list(range(len(df)))
+
+        print(f"API: Found {len(steps)} steps for run {run_id}")
+        return jsonify({'steps': steps})
+
+    except Exception as e:
+        print(f"API: Error fetching steps - {str(e)}")
+        return jsonify({'error': str(e), 'steps': []}), 500
 
 @api.route('/status', methods=['GET'])
 def get_status():
