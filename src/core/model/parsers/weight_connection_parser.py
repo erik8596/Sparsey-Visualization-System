@@ -177,11 +177,63 @@ class WeightedConnectionsParser:
                 print(f"Warning: Missing 'weights' or 'connections' in {layer_key} for step {step}. Skipping layer.")
                 continue
 
-            # Convert to numpy
-            if isinstance(weights_tensor, torch.Tensor): 
-                weights_tensor = weights_tensor.cpu().numpy()
-            if isinstance(connections_tensor, torch.Tensor): 
-                connections_tensor = connections_tensor.cpu().numpy()
+            # --- Convert to NumPy array ---
+            # Ensure data is consistently represented as NumPy arrays before further processing
+            try:
+                # Convert weights first (less likely to be jagged)
+                if isinstance(weights_tensor, torch.Tensor):
+                    weights_tensor = weights_tensor.cpu().numpy()
+                elif isinstance(weights_tensor, list):
+                    weights_tensor = np.array(weights_tensor)
+                # If already a numpy array, do nothing
+
+                # Convert connections
+                if isinstance(connections_tensor, torch.Tensor):
+                    connections_tensor = connections_tensor.cpu().numpy()
+                elif isinstance(connections_tensor, list):
+                    try:
+                        # Attempt direct conversion first
+                        connections_tensor = np.array(connections_tensor)
+                    except ValueError as ve:
+                        # If direct conversion fails due to shape, try padding
+                        if "inhomogeneous shape" in str(ve):
+                            print(f"Warning: Inhomogeneous shape detected for connections_tensor in {layer_key}. Attempting padding...")
+                            try:
+                                # Find max length
+                                max_len = 0
+                                for sublist in connections_tensor:
+                                     # Check if sublist is indeed a sequence before getting len
+                                     if hasattr(sublist, '__len__'):
+                                          max_len = max(max_len, len(sublist))
+                                     else:
+                                          # If an element isn't a sequence, padding might not be the right approach
+                                          raise TypeError(f"Element is not a sequence: {sublist}")
+
+                                if max_len == 0: # Handle empty or non-sequence lists
+                                     raise ValueError("Cannot pad connections_tensor with zero max length or non-sequence elements.")
+
+                                # Create padded array
+                                padded_connections = np.full((len(connections_tensor), max_len), -1, dtype=np.int64) # Use -1 padding
+                                for i, sublist in enumerate(connections_tensor):
+                                     if hasattr(sublist, '__len__'): # Ensure it's a sequence
+                                          current_len = len(sublist)
+                                          padded_connections[i, :current_len] = sublist
+                                     # else: implicitly handled by np.full init with -1
+
+                                connections_tensor = padded_connections
+                                print(f"Successfully padded connections_tensor for {layer_key} to shape {connections_tensor.shape}")
+                            except Exception as pad_e:
+                                print(f"Error during padding connections_tensor for {layer_key}: {pad_e}. Skipping layer.")
+                                continue # Skip layer if padding fails
+                        else:
+                            # Re-raise error if it's not the expected inhomogeneous shape error
+                            raise ve
+                # If already a numpy array, do nothing
+
+            except (ValueError, TypeError, Exception) as e: # Catch broader errors during conversion/padding
+                print(f"Error converting/padding tensors/lists to NumPy for {layer_key}: {e}. Skipping layer.")
+                continue
+            # --- End Conversion ---
 
             # --- Dimension and Shape Validation --- 
             try:
@@ -350,14 +402,66 @@ class WeightedConnectionsParser:
 
             weights_tensor = layer_connection_data.get('weights')
             connections_tensor = layer_connection_data.get('connections')
+
             if weights_tensor is None or connections_tensor is None: 
                 continue
 
-            # Convert to numpy
-            if isinstance(weights_tensor, torch.Tensor):
-                weights_tensor = weights_tensor.cpu().numpy()
-            if isinstance(connections_tensor, torch.Tensor): 
-                connections_tensor = connections_tensor.cpu().numpy()
+            # --- Convert to NumPy array ---
+            try:
+                # Convert weights first (less likely to be jagged)
+                if isinstance(weights_tensor, torch.Tensor):
+                    weights_tensor = weights_tensor.cpu().numpy()
+                elif isinstance(weights_tensor, list):
+                    weights_tensor = np.array(weights_tensor)
+                # If already a numpy array, do nothing
+
+                # Convert connections
+                if isinstance(connections_tensor, torch.Tensor):
+                    connections_tensor = connections_tensor.cpu().numpy()
+                elif isinstance(connections_tensor, list):
+                    try:
+                        # Attempt direct conversion first
+                        connections_tensor = np.array(connections_tensor)
+                    except ValueError as ve:
+                        # If direct conversion fails due to shape, try padding
+                        if "inhomogeneous shape" in str(ve):
+                            print(f"Warning: Inhomogeneous shape detected for connections_tensor in {layer_key}. Attempting padding...")
+                            try:
+                                # Find max length
+                                max_len = 0
+                                for sublist in connections_tensor:
+                                     # Check if sublist is indeed a sequence before getting len
+                                     if hasattr(sublist, '__len__'):
+                                          max_len = max(max_len, len(sublist))
+                                     else:
+                                          # If an element isn't a sequence, padding might not be the right approach
+                                          raise TypeError(f"Element is not a sequence: {sublist}")
+
+                                if max_len == 0: # Handle empty or non-sequence lists
+                                     raise ValueError("Cannot pad connections_tensor with zero max length or non-sequence elements.")
+
+                                # Create padded array
+                                padded_connections = np.full((len(connections_tensor), max_len), -1, dtype=np.int64) # Use -1 padding
+                                for i, sublist in enumerate(connections_tensor):
+                                     if hasattr(sublist, '__len__'): # Ensure it's a sequence
+                                          current_len = len(sublist)
+                                          padded_connections[i, :current_len] = sublist
+                                     # else: implicitly handled by np.full init with -1
+
+                                connections_tensor = padded_connections
+                                print(f"Successfully padded connections_tensor for {layer_key} to shape {connections_tensor.shape}")
+                            except Exception as pad_e:
+                                print(f"Error during padding connections_tensor for {layer_key}: {pad_e}. Skipping layer.")
+                                continue # Skip layer if padding fails
+                        else:
+                            # Re-raise error if it's not the expected inhomogeneous shape error
+                            raise ve
+                # If already a numpy array, do nothing
+
+            except (ValueError, TypeError, Exception) as e: # Catch broader errors during conversion/padding
+                print(f"Error converting/padding tensors/lists to NumPy for {layer_key}: {e}. Skipping layer.")
+                continue
+            # --- End Conversion ---
 
             # --- Dimension and Shape Validation (similar to parse method) ---
             try:

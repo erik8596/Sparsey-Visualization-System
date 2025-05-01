@@ -5,7 +5,6 @@ from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass, field
 from src.core.model.wandb.model_config import ModelConfig
 import concurrent.futures
-import logging # Import logging
 
 
 STS = "sparsey-testing-system"  # default weights and biases entity name
@@ -477,8 +476,10 @@ class WandBFacade:
             try:
                 artifact_data = torch_load(pt_file_path)
                 # Store in memory cache
-                if not self.mconf: self.mconf = ModelConfig() # Ensure mconf exists
-                if not hasattr(self.mconf, 'weighted_connections'): self.mconf.weighted_connections = {}
+                if not self.mconf: 
+                    self.mconf = ModelConfig() # Ensure mconf exists
+                if not hasattr(self.mconf, 'weighted_connections'): 
+                    self.mconf.weighted_connections = {}
                 self.mconf.weighted_connections[step] = artifact_data
                 print(f"Successfully loaded and cached data for step {step} from file.")
                 return artifact_data
@@ -520,8 +521,10 @@ class WandBFacade:
             if pt_file:
                 artifact_data = torch_load(pt_file)
                  # Store in memory cache
-                if not self.mconf: self.mconf = ModelConfig() # Ensure mconf exists
-                if not hasattr(self.mconf, 'weighted_connections'): self.mconf.weighted_connections = {}
+                if not self.mconf: 
+                    self.mconf = ModelConfig() # Ensure mconf exists
+                if not hasattr(self.mconf, 'weighted_connections'): 
+                    self.mconf.weighted_connections = {}
                 self.mconf.weighted_connections[step] = artifact_data
                 print(f"Successfully loaded and cached data for step {step} from W&B.")
                 return artifact_data
