@@ -1,6 +1,11 @@
 @baseUrl = http://localhost:5000
+<<<<<<< HEAD
 @project_name = svs_spring_demo
 @run_id = jizlsez2
+=======
+@project_name = weights_testing
+@run_id = 3axyziyf
+>>>>>>> ae73769abbcead445a6beaabfea2f558da3efa25
 @step = 49
 
 ### get projects

@@ -55,6 +55,8 @@ class ModelConfig:
         try:
             model_config = self._extract_model_config(run)
             summary_data = getattr(run, "summary", {})
+            history = run.scan_history()  # WandB run object scan_history()
+            history_map = { rec['_step']: rec for rec in history }
 
             # Use parsers to get activation data
             mac_parser = MACActivationParser()
@@ -63,7 +65,7 @@ class ModelConfig:
 
             mac_activations = mac_parser.parse(summary_data)
             neuron_activations = neuron_parser.parse_from_history(run)
-            input_activations = input_parser.parse(summary_data)
+            input_activations = input_parser.parse_from_history(history_map, step=0)
 
             input_dimensions = self._get_input_dimensions(model_config)
 

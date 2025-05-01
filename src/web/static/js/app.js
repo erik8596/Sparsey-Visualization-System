@@ -67,7 +67,6 @@ function setupUI() {
     runSelect.addEventListener('change', function () {
       const selectedRun = this.value;
       if (selectedRun) {
-        // Update run selection on server
         fetch(`/api/update-run/${projectSelect.value}/${selectedRun}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
@@ -85,10 +84,10 @@ function setupUI() {
     visualizeButton.addEventListener('click', () => loadRun());
   }
 
-  // Camera control buttons
-  const panButton = document.getElementById("panButton");
+  // Camera control buttons (pan, both, resetControls)
+  const panButton = document.getElementById('panButton');
   if (panButton) {
-    panButton.addEventListener("click", () => {
+    panButton.addEventListener('click', () => {
       sceneManager.controls.enableRotate = false;
       sceneManager.controls.enablePan = true;
       sceneManager.controls.mouseButtons = {
@@ -96,13 +95,13 @@ function setupUI() {
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: THREE.MOUSE.PAN
       };
-      console.log("Pan mode enabled");
+      console.log('Pan mode enabled');
     });
   }
 
-  const bothButton = document.getElementById("bothButton");
+  const bothButton = document.getElementById('bothButton');
   if (bothButton) {
-    bothButton.addEventListener("click", () => {
+    bothButton.addEventListener('click', () => {
       sceneManager.controls.enableRotate = true;
       sceneManager.controls.enablePan = true;
       sceneManager.controls.mouseButtons = {
@@ -110,18 +109,17 @@ function setupUI() {
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: THREE.MOUSE.PAN
       };
-      // Reset angle limitations
       sceneManager.controls.minAzimuthAngle = -Infinity;
       sceneManager.controls.maxAzimuthAngle = Infinity;
       sceneManager.controls.minPolarAngle = 0;
       sceneManager.controls.maxPolarAngle = Math.PI;
-      console.log("Default mode enabled (rotate & pan)");
+      console.log('Default mode enabled (rotate & pan)');
     });
   }
 
-  const resetControls = document.getElementById("resetControls");
+  const resetControls = document.getElementById('resetControls');
   if (resetControls) {
-    resetControls.addEventListener("click", () => {
+    resetControls.addEventListener('click', () => {
       sceneManager.controls.enableRotate = true;
       sceneManager.controls.enablePan = true;
       sceneManager.controls.mouseButtons = {
@@ -134,7 +132,7 @@ function setupUI() {
       sceneManager.controls.minPolarAngle = 0;
       sceneManager.controls.maxPolarAngle = Math.PI;
       sceneManager.controls.reset();
-      console.log("Controls reset");
+      console.log('Controls reset');
     });
   }
 }
@@ -144,22 +142,92 @@ function setupUI() {
  *************************************************/
 
 // If we get new data from the server for visualization
-eventBus.subscribe('newVisualizationData', (data) => {
-  // data.layers, data.input_dimensions
-  // MacManager can build the scene
+eventBus.subscribe('newVisualizationData', async (data) => {
+  // data.layers, data.input_dimensions, data.input_activations
+
+  // STEP A: Fetch history and parse step-0 before drawing
+  const proj = document.getElementById('projectSelect').value;
+  const run  = document.getElementById('runSelect').value;
+  const resp = await fetch(`/api/${proj}/${run}/history`);
+  const { step_history } = await resp.json();
+
+  // Cache for future steps
+  window._sparsey_stepHistory = step_history;
+
+  // Determine sorted steps and pick the first
+  const steps = Object.keys(step_history)
+    .map(n => parseInt(n, 10))
+    .sort((a, b) => a - b);
+  const initialStep = steps[0];
+  const initialData = step_history[initialStep] || {};
+
+  // Parse input activations at step 0
+  const pixelActs0 = {};
+  Object.entries(initialData).forEach(([key, val]) => {
+    const m = key.match(/^input_activations\/pixel_(\d+)$/);
+    if (m) pixelActs0[+m[1]] = val ? 1 : 0;
+  });
+
+  // Parse MAC activations (neuron_activations) at step 0
+  const macActs0 = {};
+  Object.entries(initialData).forEach(([key, val]) => {
+    const m = key.match(/^neuron_activations\/layer_(\d+)\/mac_(\d+)$/);
+    if (m) {
+      const layerKey = `layer_${m[1]}`;
+      const idx      = parseInt(m[2], 10) - 1; // history is 1-based
+      macActs0[layerKey] = macActs0[layerKey] || {};
+      macActs0[layerKey][idx] = val ? 1 : 0;
+    }
+  });
+
+  // STEP B: Build scene & grid based on step-0
   uiManager.buildFromLayers(
     data.layers,
-    data.input_dimensions,     // e.g. { width: 28, height: 28 }
-    data.input_activations     // dictionary {1: 1, 2: 0, ...}
+    data.input_dimensions,
+    pixelActs0          // <— pass step-0 pixel data so grid is drawn immediately
   );
 
-  // If we have valid input_dimensions, create the input grid
-  const dims = data.input_dimensions;
-  if (dims && dims.width && dims.height) {
-    uiManager.createInputGrid(dims.width, dims.height, data.input_activations);
-  } else {
-    console.error("Invalid input dimensions:", dims);
-  }
+  // Color MACs for step 0
+  uiManager.updateMacActivations(macActs0);
+
+  // STEP C: Populate dropdown without auto-trigger
+  const inputSelect = document.getElementById('inputSelect');
+  inputSelect.innerHTML = '';
+  steps.forEach(step => {
+    const opt = document.createElement('option');
+    opt.value = step;
+    opt.textContent = `Input ${step}`;
+    inputSelect.appendChild(opt);
+  });
+  inputSelect.disabled = false;
+
+  // Install listener for future steps
+  inputSelect.addEventListener('change', () => {
+    const sel      = parseInt(inputSelect.value, 10);
+    const stepData = window._sparsey_stepHistory[sel] || {};
+
+    // Update input grid
+    const pixelActs = {};
+    Object.entries(stepData).forEach(([key, val]) => {
+      const m = key.match(/^input_activations\/pixel_(\d+)$/);
+      if (m) pixelActs[+m[1]] = val ? 1 : 0;
+    });
+    uiManager.updateInputGrid(pixelActs);
+
+    // Update MAC activations
+    const macActs = {};
+    Object.entries(stepData).forEach(([key, val]) => {
+      const m = key.match(/^neuron_activations\/layer_(\d+)\/mac_(\d+)$/);
+      if (m) {
+        const layerKey = `layer_${m[1]}`;
+        const idx      = parseInt(m[2], 10) - 1;
+        macActs[layerKey] = macActs[layerKey] || {};
+        macActs[layerKey][idx] = val ? 1 : 0;
+      }
+    });
+    console.log(' → macActs:', macActs);
+    uiManager.updateMacActivations(macActs);
+  });
 });
 
 // Optionally clear side panel if we want to do that before load

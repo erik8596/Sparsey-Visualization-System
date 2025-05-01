@@ -53,121 +53,98 @@ export class UIManager {
    * Builds all layers from provided data.
    */
   buildFromLayers(layers, inputDims = null, inputActivations = null) {
-    // Remove old objects in the scene.
+    // 1) Remove old objects in the scene.
     while (this.scene.children.length > 0) {
       this.scene.remove(this.scene.children[0]);
     }
 
+    // 2) Reset all tracking arrays and maps
     this.clickableMACs = [];
     this.selectedMACs  = [];
     this.layerGroups   = {};
     this.inputGridGroup= null;
-    this.allNeurons    = [];  // Reset the neuron list
-    this._dummyNeuronConnections = []; // Clear old connections
-    this._connectionRefCounts = new Map(); // Clear reference counts
+    this.allNeurons    = [];
+    this._dummyNeuronConnections = [];
+    this._connectionRefCounts = new Map();
+
+    // ── NEW ── Store inputDims so updateInputGrid can reuse them later
+    this.inputDimensions = inputDims;
 
     const mac_spacing = 1.33;
-  
-    // Group elements by layer and compute centers
+
+    // 3) Group elements by layer and compute their centroids
     const layerGroupsObj = {};
-    layers.forEach(element => {
-      const layer = element.z;
-      if (!layerGroupsObj[layer]) {
-        layerGroupsObj[layer] = [];
-      }
-      layerGroupsObj[layer].push(element);
+    layers.forEach(el => {
+      const layer = el.z;
+      if (!layerGroupsObj[layer]) layerGroupsObj[layer] = [];
+      layerGroupsObj[layer].push(el);
     });
     const layerCenters = {};
     Object.keys(layerGroupsObj).forEach(layer => {
-      const elements = layerGroupsObj[layer];
+      const elems = layerGroupsObj[layer];
       let sumX = 0, sumY = 0;
-      elements.forEach(el => {
-        sumX += el.x;
-        sumY += el.y;
-      });
-      layerCenters[layer] = { x: sumX / elements.length, y: sumY / elements.length };
+      elems.forEach(e => { sumX += e.x; sumY += e.y; });
+      layerCenters[layer] = { x: sumX / elems.length, y: sumY / elems.length };
     });
-  
-    // Build mapping for layer spacing
+
+    // 4) Build mapping from actual z-value to layerIndex
     const zToIndexMap = {};
     zToIndexMap[this.inputGridKey] = 0;
-    const uniqueZValues = [...new Set(layers.map(el => el.z))].sort((a, b) => a - b);
-    uniqueZValues.forEach((zVal, idx) => {
-      zToIndexMap[zVal] = idx + 1;
-    });
+    const uniqueZ = [...new Set(layers.map(el => el.z))].sort((a, b) => a - b);
+    uniqueZ.forEach((zVal, idx) => { zToIndexMap[zVal] = idx + 1; });
     this.zToIndexMap = zToIndexMap;
-  
-    // Build MAC composites
-    layers.forEach(element => {
-      if (element.type === 'mac') {
-        const layerCenter = layerCenters[element.z];
-        const layerIndex  = zToIndexMap[element.z] || 0;
-        const macGroup    = this.macFactory.create(element, layerCenter, mac_spacing, layerIndex);
-  
-        // Create or add to layer group
-        if (!this.layerGroups[element.z]) {
-          const layerGroup = new THREE.Group();
-          layerGroup.position.set(0, 0, this.layerSpacing * zToIndexMap[element.z]);
-          this.layerGroups[element.z] = layerGroup;
-          this.sceneManager.add(layerGroup);
-        }
-        this.layerGroups[element.z].add(macGroup);
-        this.clickableMACs.push(macGroup);
-      }
-    });
-  
-    // Build CM objects
-    layers.forEach(element => {
-      if (element.type === 'cm') {
-        const layerCenter = layerCenters[element.z];
-        const obj = this.cmFactory.create(element, layerCenter, mac_spacing);
-        obj.userData.layerIndex = zToIndexMap[element.z] || 0;
-  
-        // Attach to nearest MAC if available
-        const thisZ = element.z;
-        let closestMac = null;
-        let minDistance = Infinity;
-        this.layerGroups[thisZ].traverse(child => {
-          if (child.userData && child.userData.type === 'mac') {
-            const dx = child.position.x - obj.position.x;
-            const dy = child.position.y - obj.position.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < minDistance) {
-              minDistance = dist;
-              closestMac = child;
-            }
-          }
-        });
-        if (closestMac) {
-          obj.position.sub(closestMac.position);
-          closestMac.add(obj);
-        } else {
-          this.layerGroups[thisZ].add(obj);
-        }
-      }
-    });
-  
-    // Build Neuron objects
-    layers.forEach(element => {
-      if (element.type === 'neuron') {
-        const layerCenter = layerCenters[element.z];
-        const obj = this.neuronFactory.create(element, layerCenter, mac_spacing);
-        obj.userData.layerIndex = zToIndexMap[element.z] || 0;
 
-        // Keep track of all neurons
-        this.allNeurons.push(obj);
-  
-        // Attach to nearest MAC if available
-        const thisZ = element.z;
-        let closestMac = null;
-        let minDistance = Infinity;
-        this.layerGroups[thisZ].traverse(child => {
-          if (child.userData && child.userData.type === 'mac') {
+    // ── NEW ── For each layer, spatially sort its MACs so macIndex matches data order
+    //            (bottom-to-top, left-to-right)
+    const macSortedByLayer = {};
+    uniqueZ.forEach(zVal => {
+      macSortedByLayer[zVal] = layerGroupsObj[zVal]
+        .filter(el => el.type === 'mac')
+        .sort((a, b) => {
+          // a.y smaller = more bottom => first
+          if (a.y !== b.y) return a.y - b.y;
+          // a.x smaller = more left => first
+          return a.x - b.x;
+        });
+    });
+
+    // 5) Build MAC groups using that spatial order
+    uniqueZ.forEach(zVal => {
+      const center   = layerCenters[zVal];
+      const layerIdx = zToIndexMap[zVal] || 0;
+      macSortedByLayer[zVal].forEach((el, macIndex) => {
+        // Inject macIndex onto the element so factory & updater agree
+        const enhanced = { ...el, macIndex };
+        const macGroup = this.macFactory.create(enhanced, center, mac_spacing, layerIdx);
+
+        // Create or reuse a THREE.Group for this layer
+        if (!this.layerGroups[zVal]) {
+          const grp = new THREE.Group();
+          grp.position.set(0, 0, this.layerSpacing * zToIndexMap[zVal]);
+          this.layerGroups[zVal] = grp;
+          this.sceneManager.add(grp);
+        }
+        this.layerGroups[zVal].add(macGroup);
+        this.clickableMACs.push(macGroup);
+      });
+    });
+
+    // 6) Build CM objects (unchanged from your original)
+    layers.forEach(el => {
+      if (el.type === 'cm') {
+        const center = layerCenters[el.z];
+        const obj    = this.cmFactory.create(el, center, mac_spacing);
+        obj.userData.layerIndex = zToIndexMap[el.z] || 0;
+
+        // Attach CM to nearest MAC if present
+        let closestMac = null, minDist = Infinity;
+        this.layerGroups[el.z].traverse(child => {
+          if (child.userData?.type === 'mac') {
             const dx = child.position.x - obj.position.x;
             const dy = child.position.y - obj.position.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < minDistance) {
-              minDistance = dist;
+            const dist = Math.hypot(dx, dy);
+            if (dist < minDist) {
+              minDist = dist;
               closestMac = child;
             }
           }
@@ -176,37 +153,60 @@ export class UIManager {
           obj.position.sub(closestMac.position);
           closestMac.add(obj);
         } else {
-          // Otherwise, add directly to the layer group
-          this.layerGroups[thisZ].add(obj);
+          this.layerGroups[el.z].add(obj);
         }
       }
     });
-  
-    // Build input grid if provided
-    if (inputDims && inputDims.width && inputDims.height) {
+
+    // 7) Build Neuron objects (unchanged)
+    layers.forEach(el => {
+      if (el.type === 'neuron') {
+        const center = layerCenters[el.z];
+        const obj    = this.neuronFactory.create(el, center, mac_spacing);
+        obj.userData.layerIndex = zToIndexMap[el.z] || 0;
+        this.allNeurons.push(obj);
+
+        // Attach to nearest MAC if present
+        let closestMac = null, minDist = Infinity;
+        this.layerGroups[el.z].traverse(child => {
+          if (child.userData?.type === 'mac') {
+            const dx = child.position.x - obj.position.x;
+            const dy = child.position.y - obj.position.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < minDist) {
+              minDist = dist;
+              closestMac = child;
+            }
+          }
+        });
+        if (closestMac) {
+          obj.position.sub(closestMac.position);
+          closestMac.add(obj);
+        } else {
+          this.layerGroups[el.z].add(obj);
+        }
+      }
+    });
+
+    // 8) Build the input grid if requested
+    if (inputDims?.width && inputDims?.height) {
       this.createInputGrid(inputDims.width, inputDims.height, inputActivations);
       if (!this.layerGroups[this.inputGridKey]) {
-        const inputGroup = new THREE.Group();
-        inputGroup.position.set(0, 0, this.layerSpacing * zToIndexMap[this.inputGridKey]);
-        this.layerGroups[this.inputGridKey] = inputGroup;
-        this.sceneManager.add(inputGroup);
+        const inputGrp = new THREE.Group();
+        inputGrp.position.set(0, 0, this.layerSpacing * zToIndexMap[this.inputGridKey]);
+        this.layerGroups[this.inputGridKey] = inputGrp;
+        this.sceneManager.add(inputGrp);
       }
       this.layerGroups[this.inputGridKey].add(this.inputGridGroup);
     }
-  
-    // Update dynamic individual layer controls
+
+    // 9) Bring back your dynamic layer controls exactly as before
     this.updateUniformScaleSliders();
-  
-    // Make sure controls are visible
-    const uniformControls   = document.getElementById('uniform-layer-scales');
-    const fullModelControls = document.getElementById('full-model-controls-box');
-    if (uniformControls)   uniformControls.classList.remove('hidden');
-    if (fullModelControls) fullModelControls.classList.remove('hidden');
+    document.getElementById('uniform-layer-scales')?.classList.remove('hidden');
+    document.getElementById('full-model-controls-box')?.classList.remove('hidden');
 
-    // Generate random *neuron* connections (instead of MAC->MAC)
+    // 10) Re-generate and show dummy neuron connections
     this.generateDummyNeuronConnections(200);
-
-    // Initially refresh connection visibility (global + no MAC toggles yet)
     this.refreshConnectionVisibility();
   }
   
@@ -254,6 +254,52 @@ export class UIManager {
         this.inputGridGroup.add(cellGroup);
       }
     }
+  }
+
+    /**
+   * Replace the existing input‐grid with a new one built from `activations`.
+   * @param {{[pixelIndex: number]: 0|1}} activations
+   */
+  updateInputGrid(activations = {}) {
+    // Remove the old grid
+    if (this.inputGridGroup && this.layerGroups[this.inputGridKey]) {
+      this.layerGroups[this.inputGridKey].remove(this.inputGridGroup);
+      // (optional) dispose geometries/materials here
+    }
+    // Recreate it using stored dimensions
+    const { width, height } = this.inputDimensions || {};
+    if (width && height) {
+      this.createInputGrid(width, height, activations);
+      this.layerGroups[this.inputGridKey].add(this.inputGridGroup);
+    } else {
+      console.error("No inputDimensions saved on UIManager");
+    }
+  }
+
+    /**
+   * Recolor all MACs based on the given activations map:
+   *   { 'layer_1': { 0:0.2222, 1:0, … }, … }
+   */
+  updateMacActivations(macActs = {}) {
+    this.clickableMACs.forEach(group => {
+      const { fillMesh, outlineLine, layerIndex, macIndex } = group.userData;
+      const layerKey = `layer_${layerIndex}`;
+
+      // Now check > 0 instead of === 1
+      const rawVal = macActs[layerKey]?.[macIndex] ?? 0;
+      const isActive = rawVal > 0;
+
+      // Pull stored colors from each mesh’s userData
+      const { activeFillColor, inactiveFillColor } = fillMesh.userData;
+      fillMesh.material.color.set(
+        isActive ? activeFillColor : inactiveFillColor
+      );
+
+      const { activeOutlineColor, inactiveOutlineColor } = outlineLine.userData;
+      outlineLine.material.color.set(
+        isActive ? activeOutlineColor : inactiveOutlineColor
+      );
+    });
   }
 
   /**
@@ -1161,3 +1207,4 @@ updateUniformScaleSliders() {
     shape.closePath();
   }
 }
+

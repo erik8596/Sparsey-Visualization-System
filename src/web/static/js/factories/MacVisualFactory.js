@@ -6,7 +6,7 @@ export class MacVisualFactory extends VisualFactory {
   create(element, layerCenter, mac_spacing, layerIndex) {
     const group = new THREE.Group();
 
-    // Draw a hexagon shape of radius 2.0
+    // 1) Draw a hexagon shape of radius 2.0
     const shape = new THREE.Shape();
     for (let i = 0; i < 6; i++) {
       const angle = (Math.PI / 3) * i;
@@ -17,56 +17,63 @@ export class MacVisualFactory extends VisualFactory {
     }
     shape.closePath();
 
-    // Determine active vs inactive
+    // 2) Define fill colors for active/inactive states
+    const fillColorActive   = 0xFFB2B2; // pink
+    const fillColorInactive = 0xFFFFFF; // white
+
+    // 3) Determine if this MAC is active
     const isActive = !!element.active;
 
-    // For MACs, we want them to be opaque (so nothing underneath shows)
-    // Active MACs: pink fill (0xFFB2B2)
-    // Inactive MACs: white fill (0xFFFFFF)
-    const fillColor = isActive ? 0xFFB2B2 : 0xFFFFFF;
+    // 4) Create the fill mesh
     const fillMat = new THREE.MeshBasicMaterial({
-      color: fillColor,
-      transparent: false, // fully opaque
+      color: isActive ? fillColorActive : fillColorInactive,
+      transparent: false,
       side: THREE.DoubleSide,
-      depthTest: true  // Ensure depth testing is on.
+      depthTest: true
     });
     const fillGeom = new THREE.ShapeGeometry(shape);
     const fillMesh = new THREE.Mesh(fillGeom, fillMat);
-    fillMesh.userData.isMacVisual = true;
     fillMesh.position.z = -0.01;
-    fillMesh.renderOrder = 100; // Ensure MAC fill renders on top
+    fillMesh.renderOrder = 100; // Render on top
+
+    // Store fill colors for dynamic updates
+    fillMesh.userData.isMacVisual = true;
+    fillMesh.userData.activeFillColor   = fillColorActive;
+    fillMesh.userData.inactiveFillColor = fillColorInactive;
+
     group.add(fillMesh);
 
-    // Outline color: active => red, inactive => blue
-    const outlineColor = isActive ? 0xFF0000 : 0x0000FF;
-    const pts = shape.getPoints();
-    const outlineGeom = new THREE.BufferGeometry().setFromPoints(pts);
+    // 5) Create the outline mesh
+    const outlineColorActive   = 0xFF0000; // red
+    const outlineColorInactive = 0x0000FF; // blue
+    const points = shape.getPoints();
+    const outlineGeom = new THREE.BufferGeometry().setFromPoints(points);
     const outlineMat = new THREE.LineBasicMaterial({
-      color: outlineColor,
+      color: isActive ? outlineColorActive : outlineColorInactive,
       linewidth: 1
     });
     const outlineLine = new THREE.LineLoop(outlineGeom, outlineMat);
 
-    // Store the original outline color in userData so it can be restored later
-    outlineLine.userData = {
-      type: 'mac_outline',
-      isMacVisual: true,
-      originalOutlineColor: outlineColor
-    };
+    // Store outline colors for dynamic updates
+    outlineLine.userData.type                  = 'mac_outline';
+    outlineLine.userData.isMacVisual           = true;
+    outlineLine.userData.activeOutlineColor    = outlineColorActive;
+    outlineLine.userData.inactiveOutlineColor  = outlineColorInactive;
 
     group.add(outlineLine);
 
-    // Metadata assignment
+    // 6) Attach metadata for step-based updates
     Object.assign(group.userData, element, {
-      outlineLine,
       fillMesh,
+      outlineLine,
       originalZ: element.z,
       type: 'mac',
       layerIndex,
+      macIndex: element.macIndex,  // Ensure 'macIndex' is provided on element
       isMACGroup: true
     });
 
-    // Position relative to the layer centroid
+    // 7) Position relative to layer center
     group.position.set(
       element.x - layerCenter.x,
       (element.y - layerCenter.y) * mac_spacing,
