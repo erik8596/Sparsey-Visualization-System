@@ -135,7 +135,9 @@ def visualize(project_name, run_id):
     """Fetches the visualization data for a specific run."""
     try:
         model_data = wbf.get_processed_model_config(run_id, project_name)
-        
+
+        #print neurons for debugging
+        print("Sending to client - Neuron activations:", model_data.neuron_activations)
         print("Sending to client - MAC activations:", model_data.mac_activations)
         print("Sending to client - Input activations:", model_data.input_activations)
 

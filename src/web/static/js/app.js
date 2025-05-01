@@ -150,7 +150,9 @@ eventBus.subscribe('newVisualizationData', (data) => {
   uiManager.buildFromLayers(
     data.layers,
     data.input_dimensions,     // e.g. { width: 28, height: 28 }
-    data.input_activations     // dictionary {1: 1, 2: 0, ...}
+    data.input_activations,     // dictionary {1: 1, 2: 0, ...}
+    data.mac_activations,    // dictionary {1: 1, 2: 0, ...}
+    data.neuron_activations // dictionary {1: 1, 2: 0, ...}
   );
 
   // If we have valid input_dimensions, create the input grid

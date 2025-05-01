@@ -94,7 +94,8 @@ export async function loadRun() {
     console.log("Raw data from server:", data);
     console.log("Input activations structure:", data.input_activations);
     console.log("MAC activations structure:", data.mac_activations);
-    
+
+    if (data.error) {
       alert("Error: " + data.error);
       return;
     }

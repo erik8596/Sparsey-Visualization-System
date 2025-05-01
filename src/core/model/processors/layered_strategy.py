@@ -33,7 +33,9 @@ class LayeredVisualizationStrategy(VisualizationStrategy):
         return {
             "layers": visualization_data,
             "input_dimensions": self._get_input_dimensions(model_config),
-            "input_activations": input_activations or {}
+            "input_activations": input_activations or {},
+            "neuron_activations": neuron_activations or {},
+            "mac_activations": mac_activations or {}
         }
 
     def _process_layer(self, idx: int, layer_name: str, layer_dict: Dict[str, Any],

@@ -12,25 +12,25 @@ class NeuronActivationParser:
         # Pattern for detailed neuron activations
         self.neuron_pattern = re.compile(r"^neuron_activations/layer_(\d+)/mac_(\d+)/cm_(\d+)/neuron_(\d+)$")
 
-    def parse_from_history(self, run) -> Dict[str, Dict[int, Dict[int, Dict[int, List[float]]]]]:
+    def parse_from_history(self, run, step=None) -> Dict[str, Dict[int, Dict[int, Dict[int, List[float]]]]]:
         """
-        Parse detailed neuron activations from run history data.
-        Returns data in the format:
-        {
-            'layer_1': {
-                0: {  # MAC 0
-                    1: {  # CM 1
-                        0: [1.0, 0.0],  # Neuron 0's activation history
-                        1: [0.0, 1.0]   # Neuron 1's activation history
-                    }
-                }
-            }
-        }
+        Parse detailed neuron activations from run history data, with support for step selection.
+
+        Args:
+            run: The WandB run object
+            step: Optional step number to retrieve (None = last step)
+
+        Returns:
+            Dict with neuron activation data for the selected step
         """
         try:
             # Get history data
             history = run.scan_history()
             df = pd.DataFrame(history)
+
+            if df.empty:
+                logger.warning("No history data available for neuron activations")
+                return {}
 
             # Find all detailed neuron activation columns
             neuron_cols = [
@@ -42,10 +42,37 @@ class NeuronActivationParser:
                 logger.warning("No neuron activation columns found in history")
                 return {}
 
+            # Use step parameter to select the appropriate row
+            if step is not None:
+                if '_step' in df.columns:
+                    # Find the row with matching step
+                    target_row = df[df['_step'] == step]
+                    if target_row.empty:
+                        logger.warning(f"Step {step} not found, using last step")
+                        row_idx = -1
+                    else:
+                        row_idx = target_row.index[0]
+                else:
+                    # Try to use step as direct index if no _step column
+                    try:
+                        if step < len(df):
+                            row_idx = step
+                        else:
+                            logger.warning(f"Step {step} exceeds available data, using last step")
+                            row_idx = -1
+                    except:
+                        row_idx = -1
+            else:
+                # Use last row if no step specified
+                row_idx = -1
+
+            # Get values for the selected step
+            row_values = df[neuron_cols].iloc[row_idx].to_dict()
+
             # Build hierarchical structure
             result = {}
 
-            for col in neuron_cols:
+            for col, value in row_values.items():
                 if match := self.neuron_pattern.match(col):
                     layer_idx, mac_idx, cm_idx, neuron_idx = match.groups()
                     layer_name = f"layer_{layer_idx}"
@@ -61,28 +88,30 @@ class NeuronActivationParser:
                     if cm_idx not in result[layer_name][mac_idx]:
                         result[layer_name][mac_idx][cm_idx] = {}
 
-                    # Get activation values for this neuron, filtering out None and NaN values
-                    activations = df[col].dropna().tolist()
-                    if activations:
-                        # Ensure all values are properly converted to numeric (0 or 1)
-                        clean_activations = []
-                        for value in activations:
-                            try:
-                                numeric_val = float(value)
-                                # Ensure binary values (0 or 1)
-                                clean_activations.append(1.0 if numeric_val > 0 else 0.0)
-                            except (ValueError, TypeError):
-                                # Skip non-numeric values
-                                clean_activations.append(0.0)
+                    # Convert to float and ensure binary value
+                    try:
+                        numeric_val = float(value)
+                        clean_value = 1.0 if numeric_val > 0 else 0.0
+                    except (ValueError, TypeError):
+                        clean_value = 0.0  # Default to inactive
 
-                        # Only store if we have valid data
-                        if clean_activations:
-                            result[layer_name][mac_idx][cm_idx][neuron_idx] = clean_activations
+                    # Store as a single-element list
+                    result[layer_name][mac_idx][cm_idx][neuron_idx] = [clean_value]
+
+            # Add debugging information
+            active_neurons = 0
+            for layer in result.values():
+                for mac in layer.values():
+                    for cm in mac.values():
+                        for act in cm.values():
+                            if act[0] == 1.0:
+                                active_neurons += 1
+            logger.info(f"Parsed neuron activations for step {step}: {active_neurons} active neurons")
 
             return result
 
         except Exception as e:
-            logger.error(f"Error parsing neuron activations: {e}")
+            logger.error(f"Error parsing neuron activations (step={step}): {e}")
             return {}
 
     def get_latest_activations(self, run) -> Dict[str, Dict[int, Dict[int, Dict[int, bool]]]]:

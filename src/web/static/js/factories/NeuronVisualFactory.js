@@ -78,6 +78,10 @@ export class NeuronVisualFactory extends VisualFactory {
       obj.userData.avg_activation = element.avg_activation;
     }
 
+    // Override the active state - let the activation data control this
+    // This ensures we don't have active neurons before processing activation data
+    // obj.userData.active = false;
+
     // Position the neuron relative to the layer centroid
     obj.position.set(
       element.x - layerCenter.x,
@@ -86,4 +90,48 @@ export class NeuronVisualFactory extends VisualFactory {
     );
     return obj;
   }
+
+  // /**
+  //  * Updates the appearance of a neuron based on its activation status.
+  //  * @param {Object} neuronObj - The neuron object to update
+  //  * @param {boolean} isActive - Whether the neuron is active
+  //  */
+  // updateAppearance(neuronObj, isActive) {
+  //   if (!neuronObj) return;
+
+  //   // Check if the neuron object itself is a mesh, otherwise look for a mesh child
+  //   const neuronMesh = neuronObj.isMesh ? neuronObj : neuronObj.children.find(child => child.isMesh);
+
+  //   if (!neuronMesh || !neuronMesh.material) {
+  //     console.warn('Cannot update neuron appearance - no mesh or material found', neuronObj);
+  //     return;
+  //   }
+
+  //   if (isActive) {
+  //     // Active neuron: black fill at 80% opacity
+  //     neuronMesh.material.color.set(0x000000);
+  //     neuronMesh.material.transparent = true;
+  //     neuronMesh.material.opacity = 0.8;
+  //     neuronMesh.renderOrder = 10;
+  //   } else {
+  //     // Inactive: white or gray based on previous state
+  //     const wasActive = neuronObj.userData.previousActive || false;
+  //     const fillColor = wasActive ? 0x808080 : 0xFFFFFF; // Gray or white
+  //     neuronMesh.material.color.set(fillColor);
+  //     neuronMesh.material.transparent = false;
+  //     neuronMesh.material.opacity = 1.0;
+  //     neuronMesh.renderOrder = 5;
+  //   }
+
+  //   // Remember this state for future updates
+  //   neuronObj.userData.previousActive = neuronObj.userData.previousActive || isActive;
+
+  //   // Ensure the outline is always visible on top
+  //   const outlineMesh = neuronObj.children.find(child =>
+  //     child.isLine || child.isLineLoop || child.isLineSegments);
+
+  //   if (outlineMesh) {
+  //     outlineMesh.renderOrder = 100;
+  //   }
+  // }
 }

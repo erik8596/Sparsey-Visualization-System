@@ -57,7 +57,7 @@ class WandBFacade:
     def api(self):
         """Returns the W&B API instance."""
         return self._api
-    
+
     def _handle_api_error(self, operation: str, error: Exception) -> None:
         """Centralized error handling for WandB API calls."""
         print(f"WandB API error during {operation}: {str(error)}")
@@ -67,27 +67,27 @@ class WandBFacade:
             raise ValueError(f"WandB API error during {operation}: {str(error)}")
         else:
             raise ValueError(f"Unexpected error during {operation}: {str(error)}")
-        
+
     def status(self) -> str:
         """
         Returns a formatted string artifact of current entity, project, and run.
-        
+
         Returns:
             str: artifact string of current state
         """
         return f"Status:\nEntity: {self.entity}\nProject: {self.project_name}\nRun: {self.run_name}"
-    
+
     def load_projects(self, entity_name: str = None) -> list:
         """
         Fetches and caches all projects for the given entity from W&B.
         Uses cached results if available and valid.
-        
+
         Args:
             entity_name (str, optional): W&B entity to fetch projects from. Defaults to self.entity.
-            
+
         Returns:
             list: List of project names
-            
+
         Raises:
             ValueError: If network, API, or other errors occur during fetch
         """
@@ -101,7 +101,7 @@ class WandBFacade:
                 if projects_list is None:
                     projects_list = []
                     print("Either no projects in entity or loading projects failed.")
-                
+
                 print(f"Successfully loaded {len(projects_list)} projects.")
                 self.projects_list = projects_list
                 return projects_list
@@ -112,7 +112,7 @@ class WandBFacade:
         except Exception as e:
             self.projects_list = []
             self._handle_api_error("project fetching", e)
-    
+
     def _extract_run_info(self, run: Any) -> Dict[str, str]:
         """Helper function to extract ID and name from a W&B run object."""
         try:
@@ -129,7 +129,7 @@ class WandBFacade:
 
         try:
             print("Attempting to load project runs...")
-            
+
             # Fetch the list of run objects from the API
             all_runs = list(self.api().runs(f'{entity}/{project}'))
 
@@ -139,12 +139,12 @@ class WandBFacade:
                 return []
 
             print(f"Found {len(all_runs)} runs. Extracting info in parallel...")
-            
+
             loaded_runs_info = []
             workers = max_workers if max_workers and max_workers > 0 else None
-            
+
             # Use ThreadPoolExecutor to extract run info in parallel
-            # Note: The primary benefit here might be limited if the bottleneck is the initial API call to list runs, 
+            # Note: The primary benefit here might be limited if the bottleneck is the initial API call to list runs,
             # but this structure allows for potentially more complex per-run processing later if needed.
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 # Submit tasks for each run object
@@ -163,10 +163,10 @@ class WandBFacade:
 
             # Sort by name for consistent comparison (optional, but good practice)
             loaded_runs_info.sort(key=lambda x: x.get('name', ''))
-            
+
             # check if cached runs match loaded runs (after sorting both for consistency)
             cached_runs_sorted = sorted(self.project_runs, key=lambda x: x.get('name', '')) if self.project_runs else []
-            
+
             if cached_runs_sorted == loaded_runs_info:
                 print("Using cached project runs list.")
                 return self.project_runs # Return original (unsorted) cache
@@ -174,7 +174,7 @@ class WandBFacade:
                 print(f"Successfully loaded info for {len(loaded_runs_info)} project runs.")
                 self.project_runs = loaded_runs_info # Update cache with the new (sorted) list
                 return loaded_runs_info
-                
+
         except Exception as e:
             self.project_runs = []
             self._handle_api_error("run fetching", e)
@@ -182,14 +182,14 @@ class WandBFacade:
     def fetch_project(self, project_name: str = None, entity_name: str = None):
         """
         Retrieves a specific project from W&B API.
-        
+
         Args:
             project_name (str, optional): Name of project to fetch
             entity_name (str, optional): Entity name. Defaults to current entity.
-            
+
         Returns:
             wandb.Api.project: W&B project object
-            
+
         Raises:
             ValueError: If network, API, or other errors occur during fetch
         """
@@ -202,14 +202,14 @@ class WandBFacade:
                 self._handle_api_error("project fetching", e)
         else:
             return self.project
-    
+
     def fetch_run(self, run_id: str = None, project_name: str = None, entity_name: str = None):
         """Fetch a specific run from WandB.
-        
+
         Args:
             run_id (str): ID of run to fetch
             project_name (str): Name of project to fetch run from
-            
+
         Returns:
             wandb.Api.run: W&B run object
         """
@@ -227,13 +227,13 @@ class WandBFacade:
     def update_project(self, project_name: str) -> bool:
         """
         Updates current project with new project data from W&B.
-        
+
         Args:
             project_name (str): Name of project to update to
-            
+
         Returns:
             bool: True if update successful, False if project not found
-            
+
         Raises:
             ValueError: If network, API, or other errors occur during update
         """
@@ -248,26 +248,26 @@ class WandBFacade:
         except Exception as e:
             self.project = None
             self._handle_api_error("project fetching", e)
-        
+
     def update_run(self, run_id: str, project_name: str = None, entity_name: str = None) -> bool:
         """
         Updates current run with new run data from W&B.
-        
+
         Args:
             run_id (str): ID of run to update to
             project_name (str, optional): Project name. Defaults to current project.
             entity_name (str, optional): Entity name. Defaults to current entity.
-            
+
         Returns:
             bool: True if update successful, False if run not found
-            
+
         Raises:
             ValueError: If network, API, or other errors occur during update
         """
         entity = entity_name or self.entity
         project = project_name or self.project_name
         try:
-            if run_id in [run['id'] for run in self.project_runs]:                
+            if run_id in [run['id'] for run in self.project_runs]:
                 print(f"Run id {run_id} found in project runs.")
                 fetched_run = self.api().run(f"{entity}/{project}/{run_id}")
                 self.run = fetched_run
@@ -281,16 +281,16 @@ class WandBFacade:
         except Exception as e:
             self.run = None
             self._handle_api_error("run fetching", e)
-    
+
     def get_processed_model_config(self, run_id: str = None, project_name: str = None, entity_name: str = None) -> Optional[ModelConfig]:
         """Fetch processed model configuration and input dimensions."""
         # Get run object, using cached run if possible
         run = self.run if (run_id == self.run_id) else self.fetch_run(
             run_id or self.run_id,
             project_name or self.project_name,
-            entity_name or self.entity
+        entity_name or self.entity
         )
-        
+
         try:
             # Get the new model config instance
             processed_config = self.mconf.get_model_config(run)
@@ -300,7 +300,7 @@ class WandBFacade:
         except ValueError as e:
             print(f"Error loading model config in facade: {e}")
             return None
-        
+
     def fetch_run_history(self, run_id: str = None, project_name: str = None, entity_name: str = None) -> List[Dict[str, Any]]:
         """Fetch run history from W&B."""
         run = self.run if (run_id == self.run_id) else self.fetch_run(
@@ -317,13 +317,13 @@ class WandBFacade:
             return self.run_history
         except Exception as e:
             self._handle_api_error("run history fetching", e)
-            return []   
-        
+            return []
+
     def _process_artifact_version(self,
-                                  artifact: Any, 
-                                  entity: str, 
-                                  proj: str, 
-                                  rid: str, 
+                                  artifact: Any,
+                                  entity: str,
+                                  proj: str,
+                                  rid: str,
                                   download_dir_root: str
                                   ) -> Tuple[Optional[int], Optional[Any]]:
         """Processes a single artifact version: checks cache, downloads, loads .pt file."""
@@ -339,8 +339,8 @@ class WandBFacade:
             # Define paths
             artifact_full_name = f"{entity}/{proj}/{artifact.name}"
             version_download_dir = os.path.join(download_dir_root, f"v{version_index}")
-            
-            # --- Caching Check --- 
+
+            # --- Caching Check ---
             pt_file_path = None
             # Check if version directory exists first
             if os.path.isdir(version_download_dir):
@@ -357,13 +357,13 @@ class WandBFacade:
                             pt_file_path = None # Reset path to trigger download
                         break # Found a .pt file, stop searching this dir
 
-            # --- Download if not cached or cache loading failed --- 
+            # --- Download if not cached or cache loading failed ---
             print(f"Processing artifact (cache miss or error): {artifact_full_name}")
             os.makedirs(version_download_dir, exist_ok=True)
 
             # Fetch and download the specific artifact version
             # Use self.api() which should be thread-safe for read operations generally
-            artifact = self.api().artifact(name=artifact_full_name, type='weighted_connections') 
+            artifact = self.api().artifact(name=artifact_full_name, type='weighted_connections')
             artifact.download(root=version_download_dir)
 
             # Find the .pt file within the specific version's directory (after download)
@@ -373,7 +373,7 @@ class WandBFacade:
                     pt_file = os.path.join(version_download_dir, filename)
                     print(f"  Found .pt file after download: {filename}")
                     break
-            
+
             # Load the data if found
             if pt_file:
                 artifact_data = torch_load(pt_file)
@@ -382,7 +382,7 @@ class WandBFacade:
             else:
                 print(f"  Warning: Pytorch (.pt) file not found in artifact {artifact_full_name} at {version_download_dir}")
                 return version_index, None # Return None data if file not found
-        
+
         except ValueError as ve:
             print(f"Error parsing version for artifact {artifact.name}: {ve}")
             return version_index, None # Return None data on error
@@ -398,7 +398,7 @@ class WandBFacade:
         entity = entity_name or self.entity
         proj = project_name or self.project_name
         rid = run_id or self.run_id
-        
+
         run = self.run if (rid == self.run_id) else self.fetch_run(rid, proj, entity)
 
         download_dir_root = os.path.join(DATA_ARTIFACT_STORE_PATH, 'weighted_connections', rid)
@@ -409,7 +409,7 @@ class WandBFacade:
 
         # filter artifacts to process
         artifacts_to_process = [
-            artifact for artifact in logged_artifacts 
+            artifact for artifact in logged_artifacts
             if "-weights:v" in artifact.name
         ]
         print(f"Found {len(artifacts_to_process)} artifacts matching the '-weights:v' convention.")
@@ -417,11 +417,11 @@ class WandBFacade:
         # using ThreadPoolExecutor for parallel processing
         results = {}
         # determine max_workers, default to None (python default) if not provided
-        workers = max_workers if max_workers and max_workers > 0 else None 
+        workers = max_workers if max_workers and max_workers > 0 else None
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
             # submit tasks
-            future_to_artifact = { 
-                executor.submit(self._process_artifact_version, artifact, entity, proj, rid, download_dir_root): artifact 
+            future_to_artifact = {
+                executor.submit(self._process_artifact_version, artifact, entity, proj, rid, download_dir_root): artifact
                 for artifact in artifacts_to_process
             }
 
@@ -440,7 +440,7 @@ class WandBFacade:
                         if version_str.startswith('v'):
                             version_index = int(version_str[1:])
                             results[version_index] = None
-                    except Exception as e: 
+                    except Exception as e:
                         print(f"Parsing version string cased an exception: {e}") # ignore if we can't even parse the version from the name
 
         print(f"\nFinished processing. Collected data for indices: {sorted(results.keys())}")
@@ -452,9 +452,9 @@ class WandBFacade:
         if not self.run_id:
             print("Error: Run ID not set in WandBFacade. Cannot determine cache path.")
             return None
-        
+
         version_dir = os.path.join(DATA_ARTIFACT_STORE_PATH, 'weighted_connections', self.run_id, f"v{step}")
-        
+
         # Need the specific artifact filename pattern. Assuming it matches the artifact name.
         # Artifact name format: {run_id}-weights:v{step}
         # Expected .pt file name might just be something generic like model.pt or specific.
@@ -492,7 +492,7 @@ class WandBFacade:
         if not all([self.run_id, self.project_name, self.entity]):
             print("Error: Facade requires run_id, project_name, and entity to fetch artifact.")
             return None
-            
+
         try:
             # Construct artifact details
             artifact_version_name = f"{self.run_id}-weights:v{step}"
@@ -501,10 +501,10 @@ class WandBFacade:
             os.makedirs(version_download_dir, exist_ok=True)
 
             print(f"Cache miss for step {step}. Fetching artifact: {artifact_full_wandb_path}...")
-            
+
             # Fetch and download the specific artifact version
             # Use self.api() which should be thread-safe for read operations generally
-            artifact = self.api().artifact(name=artifact_full_wandb_path, type='weighted_connections') 
+            artifact = self.api().artifact(name=artifact_full_wandb_path, type='weighted_connections')
             download_result_path = artifact.download(root=version_download_dir)
             print(f"Artifact for step {step} downloaded to: {download_result_path}")
 
@@ -515,7 +515,7 @@ class WandBFacade:
                     pt_file = os.path.join(version_download_dir, filename)
                     print(f"  Found .pt file after download: {filename}")
                     break
-            
+
             # Load the data if found
             if pt_file:
                 artifact_data = torch_load(pt_file)
@@ -528,7 +528,7 @@ class WandBFacade:
             else:
                 print(f"Warning: Pytorch (.pt) file not found in downloaded artifact for step {step} at {version_download_dir}")
                 return None
-        
+
         except wandb.errors.CommError as ce:
             # Specific handling for artifact not found or other API errors
             if "Could not find artifact" in str(ce) or "Not Found" in str(ce):
@@ -563,8 +563,6 @@ class WandBFacade:
         cached_data = self._load_artifact_from_cache(step)
         if cached_data is not None:
             return cached_data
-            
+
         # 3. Fetch from W&B (will also load and cache in memory if successful)
         return self._fetch_and_load_specific_artifact(step)
-        
-        
