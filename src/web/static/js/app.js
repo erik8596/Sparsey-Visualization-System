@@ -144,32 +144,55 @@ function setupUI() {
 // If we get new data from the server for visualization
 eventBus.subscribe('newVisualizationData', async (data) => {
   // data.layers, data.input_dimensions, data.input_activations
-  uiManager.buildFromLayers(
-    data.layers,
-    data.input_dimensions,
-    data.input_activations
-  );
 
-  // If we have valid input_dimensions, create the input grid
-  const dims = data.input_dimensions;
-  if (dims && dims.width && dims.height) {
-    uiManager.createInputGrid(dims.width, dims.height, data.input_activations);
-  } else {
-    console.error('Invalid input dimensions:', dims);
-  }
-
-  // 1) Fetch the full history so we know all the steps
+  // STEP A: Fetch history and parse step-0 before drawing
   const proj = document.getElementById('projectSelect').value;
   const run  = document.getElementById('runSelect').value;
   const resp = await fetch(`/api/${proj}/${run}/history`);
-  window._sparsey_stepHistory = (await resp.json()).step_history;
+  const { step_history } = await resp.json();
 
-  // 2) Populate the dropdown with actual step numbers
-  const inputSelect = document.getElementById('inputSelect');
-  inputSelect.innerHTML = '';
-  const steps = Object.keys(window._sparsey_stepHistory)
+  // Cache for future steps
+  window._sparsey_stepHistory = step_history;
+
+  // Determine sorted steps and pick the first
+  const steps = Object.keys(step_history)
     .map(n => parseInt(n, 10))
     .sort((a, b) => a - b);
+  const initialStep = steps[0];
+  const initialData = step_history[initialStep] || {};
+
+  // Parse input activations at step 0
+  const pixelActs0 = {};
+  Object.entries(initialData).forEach(([key, val]) => {
+    const m = key.match(/^input_activations\/pixel_(\d+)$/);
+    if (m) pixelActs0[+m[1]] = val ? 1 : 0;
+  });
+
+  // Parse MAC activations (neuron_activations) at step 0
+  const macActs0 = {};
+  Object.entries(initialData).forEach(([key, val]) => {
+    const m = key.match(/^neuron_activations\/layer_(\d+)\/mac_(\d+)$/);
+    if (m) {
+      const layerKey = `layer_${m[1]}`;
+      const idx      = parseInt(m[2], 10) - 1; // history is 1-based
+      macActs0[layerKey] = macActs0[layerKey] || {};
+      macActs0[layerKey][idx] = val ? 1 : 0;
+    }
+  });
+
+  // STEP B: Build scene & grid based on step-0
+  uiManager.buildFromLayers(
+    data.layers,
+    data.input_dimensions,
+    pixelActs0          // <— pass step-0 pixel data so grid is drawn immediately
+  );
+
+  // Color MACs for step 0
+  uiManager.updateMacActivations(macActs0);
+
+  // STEP C: Populate dropdown without auto-trigger
+  const inputSelect = document.getElementById('inputSelect');
+  inputSelect.innerHTML = '';
   steps.forEach(step => {
     const opt = document.createElement('option');
     opt.value = step;
@@ -178,31 +201,26 @@ eventBus.subscribe('newVisualizationData', async (data) => {
   });
   inputSelect.disabled = false;
 
-  // 3) Replace with a fresh <select> to remove old listeners
-  const freshSelect = inputSelect.cloneNode(true);
-  inputSelect.parentNode.replaceChild(freshSelect, inputSelect);
-
-  // 4) Install permanent listener for step changes
-  freshSelect.addEventListener('change', () => {
-    const sel      = parseInt(freshSelect.value, 10);
-    console.log('🔄 step-selector fired, sel =', sel);
+  // Install listener for future steps
+  inputSelect.addEventListener('change', () => {
+    const sel      = parseInt(inputSelect.value, 10);
     const stepData = window._sparsey_stepHistory[sel] || {};
 
     // Update input grid
     const pixelActs = {};
     Object.entries(stepData).forEach(([key, val]) => {
       const m = key.match(/^input_activations\/pixel_(\d+)$/);
-      if (m) pixelActs[+m[1]] = val > 0 ? 1 : 0;
+      if (m) pixelActs[+m[1]] = val ? 1 : 0;
     });
     uiManager.updateInputGrid(pixelActs);
 
-    // Update MACs from neuron_activations (binary flags)
+    // Update MAC activations
     const macActs = {};
     Object.entries(stepData).forEach(([key, val]) => {
       const m = key.match(/^neuron_activations\/layer_(\d+)\/mac_(\d+)$/);
       if (m) {
         const layerKey = `layer_${m[1]}`;
-        const idx      = parseInt(m[2], 10);
+        const idx      = parseInt(m[2], 10) - 1;
         macActs[layerKey] = macActs[layerKey] || {};
         macActs[layerKey][idx] = val ? 1 : 0;
       }
@@ -210,12 +228,6 @@ eventBus.subscribe('newVisualizationData', async (data) => {
     console.log(' → macActs:', macActs);
     uiManager.updateMacActivations(macActs);
   });
-
-  // 5) Trigger initial draw for step 0
-  if (steps.length) {
-    freshSelect.value = steps[0];
-    freshSelect.dispatchEvent(new Event('change', { bubbles: true }));
-  }
 });
 
 // Optionally clear side panel if we want to do that before load

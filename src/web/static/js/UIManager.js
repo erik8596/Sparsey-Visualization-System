@@ -94,32 +94,39 @@ export class UIManager {
     uniqueZ.forEach((zVal, idx) => { zToIndexMap[zVal] = idx + 1; });
     this.zToIndexMap = zToIndexMap;
 
-    // ── NEW ── Assign a macIndex *per layer* so updateMacActivations lines up
-    const macCounters = {};
+    // ── NEW ── For each layer, spatially sort its MACs so macIndex matches data order
+    //            (bottom-to-top, left-to-right)
+    const macSortedByLayer = {};
+    uniqueZ.forEach(zVal => {
+      macSortedByLayer[zVal] = layerGroupsObj[zVal]
+        .filter(el => el.type === 'mac')
+        .sort((a, b) => {
+          // a.y smaller = more bottom => first
+          if (a.y !== b.y) return a.y - b.y;
+          // a.x smaller = more left => first
+          return a.x - b.x;
+        });
+    });
 
-    // 5) Build MAC groups
-    layers.forEach(el => {
-      if (el.type === 'mac') {
-        const layerIdx = zToIndexMap[el.z] || 0;
-        macCounters[el.z] = (macCounters[el.z] || 0) + 1;
-        const macIndex = macCounters[el.z] - 1;
-
-        // Inject macIndex onto the element so the factory and updateMacActivations agree
+    // 5) Build MAC groups using that spatial order
+    uniqueZ.forEach(zVal => {
+      const center   = layerCenters[zVal];
+      const layerIdx = zToIndexMap[zVal] || 0;
+      macSortedByLayer[zVal].forEach((el, macIndex) => {
+        // Inject macIndex onto the element so factory & updater agree
         const enhanced = { ...el, macIndex };
-
-        const center   = layerCenters[el.z];
         const macGroup = this.macFactory.create(enhanced, center, mac_spacing, layerIdx);
 
         // Create or reuse a THREE.Group for this layer
-        if (!this.layerGroups[el.z]) {
+        if (!this.layerGroups[zVal]) {
           const grp = new THREE.Group();
-          grp.position.set(0, 0, this.layerSpacing * zToIndexMap[el.z]);
-          this.layerGroups[el.z] = grp;
+          grp.position.set(0, 0, this.layerSpacing * zToIndexMap[zVal]);
+          this.layerGroups[zVal] = grp;
           this.sceneManager.add(grp);
         }
-        this.layerGroups[el.z].add(macGroup);
+        this.layerGroups[zVal].add(macGroup);
         this.clickableMACs.push(macGroup);
-      }
+      });
     });
 
     // 6) Build CM objects (unchanged from your original)
