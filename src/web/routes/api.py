@@ -134,16 +134,25 @@ def get_run_history(project_name, run_id):
 def visualize(project_name, run_id):
     """Fetches the visualization data for a specific run."""
     try:
+        # 1) Fetch config + dimensions + activations from WandBFacade
         model_data = wbf.get_processed_model_config(run_id, project_name)
         if not model_data or not model_data.layers:
             return jsonify({"error": "No model configuration data available"}), 500
 
+        # 2) Also fetch run history for input-layer pixels
+        history = wbf.fetch_run_history(run_id=run_id, project_name=project_name)
+        from src.core.model.parsers.input_activation_parser import InputActivationParser
+        parser = InputActivationParser()
+        input_acts = parser.parse_from_history(history, step=0)
+
+        # 3) Produce the final payload, injecting our history-parsed pixels
         visualization_data = lvs.process(
             model_data.layers,
             model_data.mac_activations,
-            model_data.input_activations,
-            model_data.neuron_activations  # Pass neuron activations
+            input_acts,
+            model_data.neuron_activations
         )
+        
         return jsonify(visualization_data)
 
     except Exception as e:

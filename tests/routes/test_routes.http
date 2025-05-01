@@ -1,4 +1,4 @@
-@baseUrl = http://localhost:8000
+@baseUrl = http://localhost:5000
 @project_name = weights_testing
 @run_id = 3axyziyf
 @step = 49

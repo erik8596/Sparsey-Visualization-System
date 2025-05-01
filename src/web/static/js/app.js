@@ -144,7 +144,7 @@ function setupUI() {
  *************************************************/
 
 // If we get new data from the server for visualization
-eventBus.subscribe('newVisualizationData', (data) => {
+eventBus.subscribe('newVisualizationData', async (data) => {
   // data.layers, data.input_dimensions
   // MacManager can build the scene
   uiManager.buildFromLayers(
@@ -160,6 +160,39 @@ eventBus.subscribe('newVisualizationData', (data) => {
   } else {
     console.error("Invalid input dimensions:", dims);
   }
+
+  // 2) Fetch the full history so we know all the steps
+  const proj = document.getElementById('projectSelect').value;
+  const run  = document.getElementById('runSelect').value;
+  const resp = await fetch(`/api/${proj}/${run}/history`);
+  const { step_history } = await resp.json();
+
+  // 3) Populate the dropdown with actual step numbers
+  const inputSelect = document.getElementById('inputSelect');
+  inputSelect.innerHTML = '';            // clear dummy entries
+  const steps = Object.keys(step_history)
+    .map(n => parseInt(n, 10))
+    .sort((a, b) => a - b);
+  steps.forEach(step => {
+    const opt = document.createElement('option');
+    opt.value = step;
+    opt.textContent = `Input ${step}`;
+    inputSelect.appendChild(opt);
+  });
+  inputSelect.disabled = false;
+
+  // 4) On selection, re-draw the grid for that step
+  inputSelect.onchange = () => {
+    const sel = parseInt(inputSelect.value, 10);
+    const stepData = step_history[sel] || {};
+    const activations = {};
+    // pick out only the pixel entries
+    Object.entries(stepData).forEach(([key, val]) => {
+      const m = key.match(/^input_activations\/pixel_(\d+)$/);
+      if (m) activations[+m[1]] = val ? 1 : 0;
+    });
+    uiManager.updateInputGrid(activations);
+  };
 });
 
 // Optionally clear side panel if we want to do that before load

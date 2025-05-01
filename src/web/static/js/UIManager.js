@@ -65,6 +65,7 @@ export class UIManager {
     this.allNeurons    = [];  // Reset the neuron list
     this._dummyNeuronConnections = []; // Clear old connections
     this._connectionRefCounts = new Map(); // Clear reference counts
+    this.inputDimensions = inputDims;
 
     const mac_spacing = 1.33;
   
@@ -253,6 +254,26 @@ export class UIManager {
         );
         this.inputGridGroup.add(cellGroup);
       }
+    }
+  }
+
+    /**
+   * Replace the existing input‐grid with a new one built from `activations`.
+   * @param {{[pixelIndex: number]: 0|1}} activations
+   */
+  updateInputGrid(activations = {}) {
+    // Remove the old grid
+    if (this.inputGridGroup && this.layerGroups[this.inputGridKey]) {
+      this.layerGroups[this.inputGridKey].remove(this.inputGridGroup);
+      // (optional) dispose geometries/materials here
+    }
+    // Recreate it using stored dimensions
+    const { width, height } = this.inputDimensions || {};
+    if (width && height) {
+      this.createInputGrid(width, height, activations);
+      this.layerGroups[this.inputGridKey].add(this.inputGridGroup);
+    } else {
+      console.error("No inputDimensions saved on UIManager");
     }
   }
 
