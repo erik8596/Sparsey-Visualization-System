@@ -161,6 +161,10 @@ eventBus.subscribe('newVisualizationData', async (data) => {
   const initialStep = steps[0];
   const initialData = step_history[initialStep] || {};
 
+  // STEP A1: Fetch weighted connections for the initial step
+  const respW = await fetch(`/api/${proj}/${run}/${initialStep}/weight_connections`);
+  window._sparsey_weightConnections = await respW.json();
+
   // Parse input activations at step 0
   const pixelActs0 = {};
   Object.entries(initialData).forEach(([key, val]) => {
@@ -208,6 +212,10 @@ eventBus.subscribe('newVisualizationData', async (data) => {
   uiManager.updateMacActivations(macActs0);
   uiManager.updateNeuronActivations(neuronActs0);
 
+  // Build and display weighted connections for initial step
+  uiManager.buildWeightedConnectionsForStep(initialStep);
+  uiManager.refreshConnectionVisibility();
+
   // STEP C: Populate dropdown without auto-trigger
   const inputSelect = document.getElementById('inputSelect');
   inputSelect.innerHTML = '';
@@ -220,8 +228,10 @@ eventBus.subscribe('newVisualizationData', async (data) => {
   inputSelect.disabled = false;
 
   // Install listener for future steps
-  inputSelect.addEventListener('change', () => {
+  inputSelect.addEventListener('change', async () => {
     const sel      = parseInt(inputSelect.value, 10);
+    const respW2 = await fetch(`/api/${proj}/${run}/${sel}/weight_connections`);
+    window._sparsey_weightConnections = await respW2.json();
     const stepData = window._sparsey_stepHistory[sel] || {};
 
     // Update input grid
@@ -264,6 +274,9 @@ eventBus.subscribe('newVisualizationData', async (data) => {
     });
     console.log(' → neuronActs:', neuronActs);
     uiManager.updateNeuronActivations(neuronActs);
+    // Rebuild weighted connections for selected step
+    uiManager.buildWeightedConnectionsForStep(sel);
+    uiManager.refreshConnectionVisibility();
   });
 });
 

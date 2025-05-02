@@ -244,7 +244,7 @@ export class UIManager {
     this.updateUniformScaleSliders();
     document.getElementById('uniform-layer-scales')?.classList.remove('hidden');
     document.getElementById('full-model-controls-box')?.classList.remove('hidden');
-    this.generateDummyNeuronConnections(200);
+    this.buildWeightedConnectionsForStep(0)
     this.refreshConnectionVisibility();
   }
   
@@ -256,7 +256,8 @@ export class UIManager {
    * Creates the input grid.
    */
   createInputGrid(cols, rows, activations = {}) {
-    this.inputGridGroup = new THREE.Group();
+    this.inputGridMap   = {};               // ← NEW: map pixelIndex → cell group
+    this.inputGridGroup = new THREE.Group();  
     this.inputGridGroup.position.set(0, 0, 0);
     const hexSize = 2.0;
     const macSpacing = 3.0;
@@ -288,12 +289,15 @@ export class UIManager {
         const cellGroup = new THREE.Group();
         cellGroup.add(fillMesh);
         cellGroup.add(outlineMesh);
+        // ← NEW:
+        cellGroup.userData.type = 'input';
         cellGroup.position.set(
           x - ((cols - 1) * macSpacing) / 2,
           y - ((rows - 1) * Math.sqrt(3) * hexSize) / 2,
           zOffset
         );
         this.inputGridGroup.add(cellGroup);
+        this.inputGridMap[ macIndex - 1 ] = cellGroup;
       }
     }
   }
@@ -507,6 +511,140 @@ export class UIManager {
       conn.mesh.visible = globalShowAll || (refCount > 0);
     }
   }
+
+   /**
+   * Build neuron–neuron connections for a given simulation step
+   * using the cached weight JSON (0-based) and the existing
+   * createNeuronConnectionMesh() routine.
+   */
+  buildWeightedConnectionsForStep(step) {
+    // 🔍 DEBUG dump the raw JSON we’re about to process:
+    console.log(`🛠️ [Debug] buildWeightedConnectionsForStep(${step}) – raw JSON:`, window._sparsey_weightConnections);
+
+    // 1) Clear any existing connections
+    if (this._dummyNeuronConnections) {
+      this._dummyNeuronConnections.forEach(conn => {
+        this.scene.remove(conn.mesh);
+        conn.mesh.geometry.dispose();
+        if (conn.mesh.material) conn.mesh.material.dispose();
+      });
+    }
+    this._dummyNeuronConnections = [];
+    this._connectionRefCounts    = new Map();
+
+    // 2) Grab the weights for this step
+    let weightsForStep = window._sparsey_weightConnections;
+    // If the JSON is keyed by step, drill down:
+    if (weightsForStep[step] !== undefined) {
+      weightsForStep = weightsForStep[step];
+    }
+    if (!weightsForStep || typeof weightsForStep !== 'object') {
+      console.warn(`No weighted connections for step ${step}`);
+      return;
+    }
+
+    // 🔍 DEBUG: count total neuron entries in the JSON
+    let totalNeuronEntries = 0;
+    Object.values(weightsForStep).forEach(macs =>
+      Object.values(macs).forEach(cms =>
+        Object.values(cms).forEach(neurons =>
+          totalNeuronEntries += Object.keys(neurons).length
+        )
+      )
+    );
+    console.log(`🛠️ [Debug] total neuron entries in weightsForStep: ${totalNeuronEntries}`);
+
+    // 🔍 DEBUG: flat list of **all** non-zero connections
+    const allNonZero = [];
+    Object.values(weightsForStep).forEach(macs =>
+      Object.values(macs).forEach(cms =>
+        Object.values(cms).forEach(neurons =>
+          Object.values(neurons).forEach(data =>
+            data.sources.forEach(src => { if (src.weight) allNonZero.push(src); })
+          )
+        )
+      )
+    );
+    console.log(`🛠️ [Debug] JSON non-zero Conns (${allNonZero.length}):`, allNonZero);
+
+    // 3) Iterate through layer→mac→cm→neuron structure
+    Object.entries(weightsForStep).forEach(([layerKey, macs]) => {
+      Object.entries(macs).forEach(([macKey, cms]) => {
+        Object.entries(cms).forEach(([cmKey, neurons]) => {
+          Object.entries(neurons).forEach(([neuronKey, data]) => {
+            console.log(`🛠️ [Debug] processing ${layerKey} → ${macKey} → ${cmKey} → ${neuronKey} (sources: ${data.sources.length})`);
+
+            // Destination Three.js neuron object (1-based in UIManager)
+            const macNum    = parseInt(macKey.split('_')[1], 10) + 1;
+            const cmNum     = parseInt(cmKey.split('_')[1], 10) + 1;
+            const neuronNum = parseInt(neuronKey.split('_')[1], 10) + 1;
+            const dest = this.neuronMap[layerKey]?.[macNum]?.[cmNum]?.[neuronNum];
+            if (!dest) {
+              console.warn(`🔍 [Debug] Missing DEST for ${layerKey}.${macKey}.${cmKey}.${neuronKey}`, { layerKey, macNum, cmNum, neuronNum });
+              return;
+            }
+
+            // 4) For each source connection
+            data.sources.forEach((src, idx) => {
+              const w = src.weight;
+              if (!w) return;  // skip zero weights
+
+              // 🔍 DEBUG show this source entry
+              console.log(`    ↳ [Debug] source[${idx}] coords=${src.sparsey_coords} weight=${w}`);
+
+              // Find source object in the **previous** layer (or input grid)
+              let sourceObj = null;
+              const coords = src.sparsey_coords;
+              // compute the previous layer key
+              const thisLayerIdx = parseInt(layerKey.split('_')[1], 10);
+              const prevLayerIdx = thisLayerIdx - 1;
+              const prevLayerKey = prevLayerIdx === 0 ? 'layer_1' : `layer_${prevLayerIdx}`;
+
+              if (coords.length === 1) {
+                // single‐element sources:
+                if (prevLayerIdx === 0) {
+                  // from input pixel
+                  sourceObj = this.inputGridMap[ coords[0] ];
+                } else {
+                  // from an entire MAC of the previous layer
+                  const macNum = coords[0] + 1;
+                  sourceObj = this.macMap[ prevLayerKey ]?.[ macNum ];
+                }
+              } else if (coords.length === 3) {
+                // neuron‐to‐neuron: [macIdx, cmIdx, neuronIdx]
+                const [srcMacIdx, srcCmIdx, srcNeuronIdx] = coords;
+                sourceObj = this.neuronMap[ prevLayerKey ]
+                                 ?. [ srcMacIdx + 1 ]
+                                 ?. [ srcCmIdx  + 1 ]
+                                 ?. [ srcNeuronIdx + 1 ];
+              }
+
+              if (!sourceObj) {
+                console.warn(`🔍 [Debug] Missing SOURCE for srcCoords=${coords} → dest ${layerKey}.${macKey}.${cmKey}.${neuronKey}`);
+                return;
+              }
+
+              // 5) Create the Three.js mesh (arc/line)
+              const mesh = this.createNeuronConnectionMesh(sourceObj, dest, w);
+              mesh.visible = false;
+              mesh.userData.isNeuronConnection = true;
+              this.scene.add(mesh);
+
+              // 6) Track it for toggles & "Show All"
+              const conn = { neuronA: sourceObj, neuronB: dest, mesh, weight: w };
+              this._dummyNeuronConnections.push(conn);
+              this._connectionRefCounts.set(conn, 0);
+            });
+          });
+        });
+      });
+    });
+
+    // 🔍 DEBUG summary of created connections:
+    console.log(`🛠️ [Debug] buildWeightedConnectionsForStep(${step}) created ${this._dummyNeuronConnections.length} connections.`);
+  }
+
+
 
   /**
    * Helper: find all neurons inside a particular MAC group.
@@ -939,7 +1077,17 @@ updateUniformScaleSliders() {
       macGroup.userData.isSelected = true;
       this.selectedMACs.push(macGroup);
   
+      // ① increment the refCounts so they become visible
       this.incrementConnectionRefCountForMac(macGroup);
+      // ② DEBUG: list which connections belong to this MAC
+      console.log(
+        `Weighted connections for MAC ${macGroup.userData.layerKey}.${macGroup.userData.macIndex}:`,
+        this._dummyNeuronConnections.filter(conn =>
+          this.getNeuronsInMAC(macGroup).includes(conn.neuronA) ||
+          this.getNeuronsInMAC(macGroup).includes(conn.neuronB)
+        )
+      );
+      // ③ refresh visibility as usual
       this.refreshConnectionVisibility();
     }
   
@@ -1346,7 +1494,4 @@ updateUniformScaleSliders() {
       );
     });
   }
-
-  
 }
-
