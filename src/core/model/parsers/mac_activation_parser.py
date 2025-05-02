@@ -80,7 +80,7 @@ class MACActivationParser:
                     continue
                 layer_idx, mac_idx = match.groups()
                 layer = f"layer_{layer_idx}"
-                idx   = int(mac_idx) - 1
+                idx   = int(mac_idx)
                 # val is typically 0 or 1
                 mac_map.setdefault(layer, {})[idx] = 1 if val else 0
 

@@ -318,28 +318,47 @@ export class UIManager {
     }
   }
 
-  // ── And update updateMacActivations to avoid overwriting green toggles ──
   updateMacActivations(macActs = {}) {
-    this.clickableMACs.forEach(group => {
-      // if it's manually toggled ON, leave it green
-      if (group.userData.isSelected) return;
-
-      const { fillMesh, outlineLine, layerIndex, macIndex } = group.userData;
-      const layerKey = `layer_${layerIndex}`;
-      const rawVal = macActs[layerKey]?.[macIndex] ?? 0;
+    console.group('⟳ updateMacActivations');
+  
+    // clickableMACs is your array of MAC groups
+    this.clickableMACs.forEach(macGroup => {
+      // unpack exactly what you stored in buildFromLayers
+      const { layerKey, macIndex, fillMesh, outlineLine } = macGroup.userData;
+      const layerMap = macActs[layerKey] || {};
+  
+      // 1) show what keys actually exist in your activation map
+      console.log(`  [${layerKey}] available keys →`, Object.keys(layerMap));
+  
+      // 2) test both one-based and zero-based lookups
+      const rawOneBased  = layerMap[macIndex];
+      const rawZeroBased = layerMap[macIndex - 1];
+      console.log(
+        `    MAC ${layerKey}.mac_${macIndex}:`,
+        ` map[${macIndex}]→`, rawOneBased,
+        ` map[${macIndex - 1}]→`, rawZeroBased
+      );
+  
+      // new, correct zero-based lookup:
+      const rawVal = macActs[layerKey]?.[macIndex - 1] ?? 0;
       const isActive = rawVal > 0;
-
-      // fill color
-      const { activeFillColor, inactiveFillColor } = fillMesh.userData;
-      fillMesh.material.color.set(isActive ? activeFillColor : inactiveFillColor);
-
-      // outline color & re-stash base
-      const { activeOutlineColor, inactiveOutlineColor } = outlineLine.userData;
-      const baseColor = isActive ? activeOutlineColor : inactiveOutlineColor;
-      outlineLine.material.color.set(baseColor);
-      outlineLine.userData.originalOutlineColor = outlineLine.material.color.clone();
+  
+      // 4) apply your usual coloring
+      fillMesh.material.color.set(
+        isActive
+          ? fillMesh.userData.activeFillColor
+          : fillMesh.userData.inactiveFillColor
+      );
+      outlineLine.material.color.set(
+        isActive
+          ? outlineLine.userData.activeOutlineColor
+          : outlineLine.userData.inactiveOutlineColor
+      );
     });
+  
+    console.groupEnd();
   }
+  
 
   /**
    * Generate random neuron–neuron connections for demonstration.
@@ -1288,6 +1307,46 @@ updateUniformScaleSliders() {
     console.groupEnd();
   }
 
+  /**
+   * Recolor every neuron mesh: black if active (true) at this step, white otherwise.
+   * Assumes your parser built:
+   *   neuronActs = {
+   *     layer_1: {
+   *       1: {            // macIndex
+   *         1: {          // cmIndex
+   *           1: false,  // neuronIndex → boolean/null
+   *           2: true
+   *         },
+   *         2: {  … }
+   *       },
+   *       2: {  … }
+   *     },
+   *     layer_2: { … }
+   *   }
+   */
+  updateNeuronActivations(neuronActs = {}) {
+    this.allNeurons.forEach(neuron => {
+      const { layerKey, macIndex, cmIndex, neuronIndex } = neuron.userData;
 
+      // drill safely into the maps
+      const layerMap  = neuronActs[layerKey]   || {};
+      const cmMap     = layerMap[macIndex]     || {};
+      const neuronMap = cmMap[cmIndex]         || {};
+
+      // 👇 one-based lookup: JSON keys are "1","2",… not "0","1",…
+      const isActive = Boolean(neuronMap[neuronIndex]);
+
+      // reset and recolor
+      neuron.material.transparent = false;
+      neuron.material.opacity     = 1.0;
+      neuron.material.color.set(
+        isActive
+          ? (neuron.userData.activeColor   || new THREE.Color(0x000000))
+          : (neuron.userData.inactiveColor || new THREE.Color(0xffffff))
+      );
+    });
+  }
+
+  
 }
 

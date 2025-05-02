@@ -180,6 +180,23 @@ eventBus.subscribe('newVisualizationData', async (data) => {
     }
   });
 
+  // Parse neuron activations (step 0)
+  const neuronActs0 = {};
+  Object.entries(initialData).forEach(([key,val]) => {
+    const m = key.match(
+      /^neuron_activations\/layer_(\d+)\/mac_(\d+)\/cm_(\d+)\/neuron_(\d+)$/
+    );
+    if (!m) return;
+    const [, L, M, C, N] = m.map((v,i) =>
+      i===0 ? v : parseInt(v,10)
+    );
+    const layerKey = `layer_${L}`;
+    neuronActs0[layerKey]           ||= {};
+    neuronActs0[layerKey][M]       ||= {};
+    neuronActs0[layerKey][M][C]    ||= {};
+    neuronActs0[layerKey][M][C][N]  = !!val;
+  });
+
   // STEP B: Build scene & grid based on step-0
   uiManager.buildFromLayers(
     data.layers,
@@ -189,6 +206,7 @@ eventBus.subscribe('newVisualizationData', async (data) => {
 
   // Color MACs for step 0
   uiManager.updateMacActivations(macActs0);
+  uiManager.updateNeuronActivations(neuronActs0);
 
   // STEP C: Populate dropdown without auto-trigger
   const inputSelect = document.getElementById('inputSelect');
@@ -227,6 +245,25 @@ eventBus.subscribe('newVisualizationData', async (data) => {
     });
     console.log(' → macActs:', macActs);
     uiManager.updateMacActivations(macActs);
+
+    // Update neuron activations
+    const neuronActs = {};
+    Object.entries(stepData).forEach(([key,val]) => {
+      const m = key.match(
+        /^neuron_activations\/layer_(\d+)\/mac_(\d+)\/cm_(\d+)\/neuron_(\d+)$/
+      );
+      if (!m) return;
+      const [, L, M, C, N] = m.map((v,i) =>
+        i===0 ? v : parseInt(v,10)
+      );
+      const layerKey = `layer_${L}`;
+      neuronActs[layerKey]           ||= {};
+      neuronActs[layerKey][M]       ||= {};
+      neuronActs[layerKey][M][C]    ||= {};
+      neuronActs[layerKey][M][C][N]  = !!val;
+    });
+    console.log(' → neuronActs:', neuronActs);
+    uiManager.updateNeuronActivations(neuronActs);
   });
 });
 

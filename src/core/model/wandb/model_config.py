@@ -63,7 +63,7 @@ class ModelConfig:
             neuron_parser = NeuronActivationParser()
             input_parser = InputActivationParser()
 
-            mac_activations = mac_parser.parse(summary_data)
+            mac_activations = mac_parser.parse_from_history(history_map, step=0)
             neuron_activations = neuron_parser.parse_from_history(run)
             input_activations = input_parser.parse_from_history(history_map, step=0)
 
