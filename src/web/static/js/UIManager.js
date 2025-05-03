@@ -30,10 +30,11 @@ export class UIManager {
 
     this.clickableMACs = [];
     this.selectedMACs = [];
+    this.macProbs = {}; 
 
     // Arrays to track all neurons + the neuron connections
     this.allNeurons = [];
-    this._dummyNeuronConnections = [];   // (Random mock connections)
+    this._neuronConnections = [];
     this._connectionRefCounts = new Map(); // Key: connection object, Value: reference count
 
     // Instantiate the visual factories.
@@ -48,26 +49,35 @@ export class UIManager {
     // Initialize static Full Model Controls.
     this.initializeFullModelControls();
   }
-  
-  buildFromLayers(layers, inputDims = null, inputActivations = null) {
-    // 1) Remove old objects in the scene.
+
+  // ── NEW ── Remove-and-reset logic pulled into helpers ──────────────
+  clearScene() {
     while (this.scene.children.length > 0) {
       this.scene.remove(this.scene.children[0]);
     }
+  }
+
+  resetState() {
+    this.clickableMACs            = [];
+    this.selectedMACs             = [];
+    this.layerGroups              = {};
+    this.inputGridGroup           = null;
+    this.allNeurons               = [];
+    this._NeuronConnections       = [];
+    this._connectionRefCounts     = new Map();
+    this.macMap                   = {};
+    this.cmMap                    = {};
+    this.neuronMap                = {};
+  }
   
-    // 2) Reset all tracking arrays, maps, and lookup tables
-    this.clickableMACs           = [];
-    this.selectedMACs            = [];
-    this.layerGroups             = {};
-    this.inputGridGroup          = null;
-    this.allNeurons              = [];
-    this._dummyNeuronConnections = [];
-    this._connectionRefCounts    = new Map();
-    this.macMap                  = {};
-    this.cmMap                   = {};
-    this.neuronMap               = {};
+  buildFromLayers(layers, inputDims = null, inputActivations = null) {
+    // 1) Clear out the old scene
+    this.clearScene();
   
-    // ── Store inputDims so updateInputGrid can reuse them later
+    // 2) Reset all our tracking arrays/maps
+    this.resetState();
+  
+    // 3) Store inputDims so updateInputGrid can reuse them later
     this.inputDimensions = inputDims;
   
     // ── First pass: assign global MAC index, per-MAC CM index (1-based), per-CM neuron index (1-based)
@@ -92,7 +102,7 @@ export class UIManager {
       }
     });
   
-    // 3) Group elements by layer and compute centroids
+    // 4) Group elements by layer and compute centroids
     const layerGroupsObj = {};
     layers.forEach(el => {
       layerGroupsObj[el.z] ||= [];
@@ -105,14 +115,14 @@ export class UIManager {
       layerCenters[z] = { x: sumX / elems.length, y: sumY / elems.length };
     });
   
-    // 4) Map z-values to layer indices
+    // 5) Map z-values to layer indices
     const zToIndexMap = {};
     zToIndexMap[this.inputGridKey] = 0;
     const uniqueZ = [...new Set(layers.map(el => el.z))].sort((a, b) => a - b);
     uniqueZ.forEach((zVal, idx) => { zToIndexMap[zVal] = idx + 1; });
     this.zToIndexMap = zToIndexMap;
   
-    // ── Sort MACs by global index so we can renumber per-layer
+    // 6) Sort MACs by global index so we can renumber per-layer
     const mac_spacing = 1.33;
     const macSortedByLayer = {};
     uniqueZ.forEach(zVal => {
@@ -121,39 +131,10 @@ export class UIManager {
         .sort((a, b) => a.globalMacIndex - b.globalMacIndex);
     });
   
-    // 5) Build MAC groups & assign per-layer MAC indices (1-based)
-    uniqueZ.forEach(zVal => {
-      const center   = layerCenters[zVal];
-      const layerIdx = zToIndexMap[zVal] || 0;
-      const layerKey = `layer_${layerIdx}`;
-      this.macMap[layerKey] = {};
+    // 7) Build MAC groups & assign per-layer MAC indices (moved into helper)
+    this._buildMACMeshes(macSortedByLayer, layerCenters, zToIndexMap);
   
-      macSortedByLayer[zVal].forEach((el, idx) => {
-        const macNumber = idx + 1;
-        el.macIndex = macNumber;
-  
-        const enhanced = { ...el, macIndex: macNumber };
-        const macGroup = this.macFactory.create(enhanced, center, mac_spacing, layerIdx);
-  
-        macGroup.userData.type           = 'mac';
-        macGroup.userData.layerKey       = layerKey;
-        macGroup.userData.macIndex       = macNumber;
-        macGroup.userData.layerIndex     = layerIdx;
-        macGroup.userData.globalMacIndex = el.globalMacIndex;
-  
-        if (!this.layerGroups[zVal]) {
-          const grp = new THREE.Group();
-          grp.position.set(0, 0, this.layerSpacing * layerIdx);
-          this.layerGroups[zVal] = grp;
-          this.sceneManager.add(grp);
-        }
-        this.layerGroups[zVal].add(macGroup);
-        this.clickableMACs.push(macGroup);
-        this.macMap[layerKey][macNumber] = macGroup;
-      });
-    });
-  
-    // ── Build lookup from (layerKey|globalMacIndex) → localMacIndex
+    // 8) Build lookup from (layerKey|globalMacIndex) → localMacIndex
     const globalToLocal = {};
     Object.entries(this.macMap).forEach(([layerKey, macs]) => {
       Object.entries(macs).forEach(([localIdx, macGroup]) => {
@@ -162,96 +143,204 @@ export class UIManager {
       });
     });
   
-    // 6) Build & index CMs (per-MAC, 1-based)
-    layers.forEach(el => {
-      if (el.type === 'cm') {
-        const layerIdx = zToIndexMap[el.z] || 0;
-        const layerKey = `layer_${layerIdx}`;
-        const mappedMac = globalToLocal[`${layerKey}|${el.globalMacIndex}`];
-        el.macIndex = mappedMac;
-        const cmIndex = el.cmIndex;
+    // 9) Build & index CMs (per-MAC, 1-based)
+    this._buildCMMeshes(layers, layerCenters, zToIndexMap, globalToLocal);
   
-        const obj = this.cmFactory.create(el, layerCenters[el.z], mac_spacing);
-        obj.userData.type     = 'cm';
-        obj.userData.layerKey = layerKey;
-        obj.userData.macIndex = mappedMac;
-        obj.userData.cmIndex  = cmIndex;
+    // 10) Build & index Neurons (per-CM, 1-based)
+    this._buildNeuronMeshes(layers, layerCenters, zToIndexMap, globalToLocal);
+
+    // ── NEW ── Count how many MACs per layer for bar-graph zero-filling
+    this.macCounts = {};
+    Object.entries(this.macMap).forEach(([layerKey, macs]) => {
+      this.macCounts[layerKey] = Object.keys(macs).length;
+    });
   
-        this.cmMap[layerKey]            ||= {};
-        this.cmMap[layerKey][mappedMac] ||= {};
-        this.cmMap[layerKey][mappedMac][cmIndex] = obj;
+    // 11) Build input grid if requested (unchanged)
+    this._buildInputGrid(inputDims, inputActivations);
   
-        const parentMac = this.macMap[layerKey][mappedMac];
-        if (parentMac) {
-          obj.position.sub(parentMac.position);
-          parentMac.add(obj);
-        } else {
-          this.layerGroups[el.z].add(obj);
+    // 12) Restore UI controls and connections (unchanged)
+    this._finalizeScene();
+  }
+  
+  /**
+   * @private
+   * Builds all MAC groups, assigns macIndex, wires them into scene & maps.
+   */
+  _buildMACMeshes(macSortedByLayer, layerCenters, zToIndexMap) {
+    const mac_spacing = 1.33;
+
+    Object.entries(macSortedByLayer).forEach(([zVal, macList]) => {
+      const center   = layerCenters[zVal];
+      const layerIdx = zToIndexMap[zVal] || 0;
+      const layerKey = `layer_${layerIdx}`;
+      this.macMap[layerKey] = {};
+
+      macList.forEach((el, idx) => {
+        const macNumber = idx + 1;
+        el.macIndex = macNumber;
+
+        // create with factory
+        const enhanced = { ...el, macIndex: macNumber };
+        const macGroup = this.macFactory.create(enhanced, center, mac_spacing, layerIdx);
+
+        // userData
+        Object.assign(macGroup.userData, {
+          type:           'mac',
+          layerKey,
+          macIndex:       macNumber,
+          layerIndex:     layerIdx,
+          globalMacIndex: el.globalMacIndex
+        });
+
+        // ensure group exists
+        if (!this.layerGroups[zVal]) {
+          const grp = new THREE.Group();
+          grp.position.set(0, 0, this.layerSpacing * layerIdx);
+          this.layerGroups[zVal] = grp;
+          this.sceneManager.add(grp);
         }
-      }
+
+        // add to scene & maps
+        this.layerGroups[zVal].add(macGroup);
+        this.clickableMACs.push(macGroup);
+        this.macMap[layerKey][macNumber] = macGroup;
+      });
     });
-  
-    // 7) Build & index Neurons (per-CM, 1-based)
+  }
+
+  /**
+   * @private
+   * Builds all CMs, wires them into their parent MACs or layer groups,
+   * and populates this.cmMap.
+   */
+  _buildCMMeshes(layers, layerCenters, zToIndexMap, globalToLocal) {
+    const mac_spacing = 1.33;
+
     layers.forEach(el => {
-      if (el.type === 'neuron') {
-        const layerIdx    = zToIndexMap[el.z] || 0;
-        const layerKey    = `layer_${layerIdx}`;
-        const mappedMac   = globalToLocal[`${layerKey}|${el.globalMacIndex}`];
-        el.macIndex = mappedMac;
-        const cmIndex     = el.cmIndex;
-        const neuronIndex = el.neuronIndex;
-  
-        const cmData = layers.find(l =>
-          l.type === 'cm' &&
-          l.z === el.z &&
-          l.globalMacIndex === el.globalMacIndex &&
-          l.cmIndex === el.cmIndex
-        );
-        const cmCenter = { x: cmData.x, y: cmData.y };
-  
-        const obj = this.neuronFactory.create(el, cmCenter, mac_spacing);
-        obj.userData.type        = 'neuron';
-        obj.userData.layerKey    = layerKey;
-        obj.userData.macIndex    = mappedMac;
-        obj.userData.cmIndex     = cmIndex;
-        obj.userData.neuronIndex = neuronIndex;
-        this.allNeurons.push(obj);
-  
-        this.neuronMap[layerKey]                            ||= {};
-        this.neuronMap[layerKey][mappedMac]                  ||= {};
-        this.neuronMap[layerKey][mappedMac][cmIndex]         ||= {};
-        this.neuronMap[layerKey][mappedMac][cmIndex][neuronIndex] = obj;
-  
-        const parentCm = this.cmMap[layerKey]?.[mappedMac]?.[cmIndex];
-        if (parentCm) parentCm.add(obj);
-        else          this.layerGroups[el.z].add(obj);
+      if (el.type !== 'cm') return;
+
+      const layerIdx  = zToIndexMap[el.z] || 0;
+      const layerKey  = `layer_${layerIdx}`;
+      const mappedMac = globalToLocal[`${layerKey}|${el.globalMacIndex}`];
+      const cmIndex   = el.cmIndex;
+
+      // create CM mesh
+      const cmMesh = this.cmFactory.create(el, layerCenters[el.z], mac_spacing);
+      Object.assign(cmMesh.userData, {
+        type:     'cm',
+        layerKey,
+        macIndex: mappedMac,
+        cmIndex
+      });
+
+      // ensure map structure
+      this.cmMap[layerKey]            ||= {};
+      this.cmMap[layerKey][mappedMac] ||= {};
+      this.cmMap[layerKey][mappedMac][cmIndex] = cmMesh;
+
+      // attach to scene
+      const parentMac = this.macMap[layerKey]?.[mappedMac];
+      if (parentMac) {
+        // position relative to its MAC
+        cmMesh.position.sub(parentMac.position);
+        parentMac.add(cmMesh);
+      } else {
+        // fallback: add directly to layer group
+        this.layerGroups[el.z].add(cmMesh);
       }
     });
-  
-    // 8) Build input grid if requested (unchanged)
-    if (inputDims?.width && inputDims?.height) {
-      this.createInputGrid(inputDims.width, inputDims.height, inputActivations);
-      if (!this.layerGroups[this.inputGridKey]) {
-        const inputGrp = new THREE.Group();
-        inputGrp.position.set(0, 0, this.layerSpacing * zToIndexMap[this.inputGridKey]);
-        this.layerGroups[this.inputGridKey] = inputGrp;
-        this.sceneManager.add(inputGrp);
+  }
+
+  /**
+   * @private
+   * Builds all neurons, wires them into their parent CMs or layer groups,
+   * and populates this.neuronMap & this.allNeurons.
+   */
+  _buildNeuronMeshes(layers, layerCenters, zToIndexMap, globalToLocal) {
+    const mac_spacing = 1.33;
+
+    layers.forEach(el => {
+      if (el.type !== 'neuron') return;
+
+      const layerIdx    = zToIndexMap[el.z] || 0;
+      const layerKey    = `layer_${layerIdx}`;
+      const mappedMac   = globalToLocal[`${layerKey}|${el.globalMacIndex}`];
+      const cmIndex     = el.cmIndex;
+      const neuronIndex = el.neuronIndex;
+
+      // find CM center for positioning
+      const cmData = layers.find(l =>
+        l.type === 'cm' &&
+        l.z === el.z &&
+        l.globalMacIndex === el.globalMacIndex &&
+        l.cmIndex === cmIndex
+      );
+      const cmCenter = { x: cmData.x, y: cmData.y };
+
+      // create neuron mesh
+      const neuronMesh = this.neuronFactory.create(el, cmCenter, mac_spacing);
+      Object.assign(neuronMesh.userData, {
+        type:        'neuron',
+        layerKey,
+        macIndex:    mappedMac,
+        cmIndex,
+        neuronIndex
+      });
+
+      // track it
+      this.allNeurons.push(neuronMesh);
+      this.neuronMap[layerKey] ||= {};
+      this.neuronMap[layerKey][mappedMac] ||= {};
+      this.neuronMap[layerKey][mappedMac][cmIndex] ||= {};
+      this.neuronMap[layerKey][mappedMac][cmIndex][neuronIndex] = neuronMesh;
+
+      // attach to its CM (or fallback)
+      const parentCm = this.cmMap[layerKey]?.[mappedMac]?.[cmIndex];
+      if (parentCm) {
+        parentCm.add(neuronMesh);
+      } else {
+        this.layerGroups[el.z].add(neuronMesh);
       }
-      this.layerGroups[this.inputGridKey].add(this.inputGridGroup);
+    });
+  }
+
+  /**
+   * @private
+   * Builds the input‐pixel grid if dimensions are given,
+   * and attaches it at the correct z‐layer.
+   */
+  _buildInputGrid(inputDims, inputActivations) {
+    if (!inputDims?.width || !inputDims?.height) return;
+
+    // create grid
+    this.createInputGrid(inputDims.width, inputDims.height, inputActivations);
+
+    // ensure layer group exists
+    const layerIdx  = this.zToIndexMap[this.inputGridKey];
+    if (!this.layerGroups[this.inputGridKey]) {
+      const inputGrp = new THREE.Group();
+      inputGrp.position.set(0, 0, this.layerSpacing * layerIdx);
+      this.layerGroups[this.inputGridKey] = inputGrp;
+      this.sceneManager.add(inputGrp);
     }
-  
-    // 9) Restore UI controls and connections (unchanged)
+
+    // attach grid
+    this.layerGroups[this.inputGridKey].add(this.inputGridGroup);
+  }
+
+  /**
+   * @private
+   * Re-enables sliders, panels, builds initial connections, and
+   * toggles visibility so the UI is back in its interactive state.
+   */
+  _finalizeScene() {
     this.updateUniformScaleSliders();
     document.getElementById('uniform-layer-scales')?.classList.remove('hidden');
     document.getElementById('full-model-controls-box')?.classList.remove('hidden');
-    this.buildWeightedConnectionsForStep(0)
+    this.buildWeightedConnectionsForStep(0);
     this.refreshConnectionVisibility();
   }
-  
-  
 
-
-  
   /**
    * Creates the input grid.
    */
@@ -362,51 +451,6 @@ export class UIManager {
   
     console.groupEnd();
   }
-  
-
-  /**
-   * Generate random neuron–neuron connections for demonstration.
-   * If same layer => an arc (tube). Otherwise => a straight line.
-   */
-  generateDummyNeuronConnections(numConnections = 200) {
-    // Clear existing connections
-    if (this._dummyNeuronConnections) {
-      this._dummyNeuronConnections.forEach(conn => {
-        this.scene.remove(conn.mesh);
-        conn.mesh.geometry.dispose();
-        if (conn.mesh.material) conn.mesh.material.dispose();
-      });
-    }
-    this._dummyNeuronConnections = [];
-    this._connectionRefCounts = new Map(); // reset reference counts
-
-    const n = this.allNeurons.length;
-    if (n < 2) return;
-
-    for (let i = 0; i < numConnections; i++) {
-      // Pick a random pair of distinct neurons
-      const idxA = Math.floor(Math.random() * n);
-      const idxB = Math.floor(Math.random() * n);
-      if (idxA === idxB) continue;
-
-      const neuronA = this.allNeurons[idxA];
-      const neuronB = this.allNeurons[idxB];
-      const weight = Math.random(); // random weight for demonstration
-
-      // Create the mesh (arc or line)
-      const mesh = this.createNeuronConnectionMesh(neuronA, neuronB, weight);
-      // Start hidden (we'll control visibility via refreshConnectionVisibility)
-      mesh.visible = false;
-      mesh.userData.isNeuronConnection = true;
-
-      this.scene.add(mesh);
-      const conn = { neuronA, neuronB, mesh, weight };
-      this._dummyNeuronConnections.push(conn);
-
-      // Initialize refCount to 0
-      this._connectionRefCounts.set(conn, 0);
-    }
-  }
 
   /**
    * Creates either an arc (TubeGeometry) for same-layer or a line for cross-layer.
@@ -466,9 +510,9 @@ export class UIManager {
    * Recompute geometry for each neuron–neuron connection (arc or line)
    * in case neuron positions changed (due to scaling or spacing).
    */
-  updateDummyNeuronConnections() {
-    if (!this._dummyNeuronConnections) return;
-    this._dummyNeuronConnections.forEach(conn => {
+  updateWeightedConnections() {
+    if (!this._neuronConnections) return;
+    this._neuronConnections.forEach(conn => {
       const { neuronA, neuronB, mesh } = conn;
       const posA = new THREE.Vector3();
       const posB = new THREE.Vector3();
@@ -503,9 +547,9 @@ export class UIManager {
     const weightedChk = document.getElementById('weightedConnectionsCheckbox');
     const globalShowAll = (weightedChk && weightedChk.checked);
 
-    if (!this._dummyNeuronConnections) return;
+    if (!this._neuronConnections) return;
 
-    for (const conn of this._dummyNeuronConnections) {
+    for (const conn of this._neuronConnections) {
       const refCount = this._connectionRefCounts.get(conn) || 0;
       // If global is on => always visible, else visible if refCount > 0
       conn.mesh.visible = globalShowAll || (refCount > 0);
@@ -518,18 +562,18 @@ export class UIManager {
    * createNeuronConnectionMesh() routine.
    */
   buildWeightedConnectionsForStep(step) {
-    // 🔍 DEBUG dump the raw JSON we’re about to process:
-    console.log(`🛠️ [Debug] buildWeightedConnectionsForStep(${step}) – raw JSON:`, window._sparsey_weightConnections);
+    //  DEBUG dump the raw JSON we’re about to process:
+    console.log(` [Debug] buildWeightedConnectionsForStep(${step}) – raw JSON:`, window._sparsey_weightConnections);
 
     // 1) Clear any existing connections
-    if (this._dummyNeuronConnections) {
-      this._dummyNeuronConnections.forEach(conn => {
+    if (this._neuronConnections) {
+      this._neuronConnections.forEach(conn => {
         this.scene.remove(conn.mesh);
         conn.mesh.geometry.dispose();
         if (conn.mesh.material) conn.mesh.material.dispose();
       });
     }
-    this._dummyNeuronConnections = [];
+    this._neuronConnections = [];
     this._connectionRefCounts    = new Map();
 
     // 2) Grab the weights for this step
@@ -543,7 +587,7 @@ export class UIManager {
       return;
     }
 
-    // 🔍 DEBUG: count total neuron entries in the JSON
+    //  DEBUG: count total neuron entries in the JSON
     let totalNeuronEntries = 0;
     Object.values(weightsForStep).forEach(macs =>
       Object.values(macs).forEach(cms =>
@@ -552,9 +596,9 @@ export class UIManager {
         )
       )
     );
-    console.log(`🛠️ [Debug] total neuron entries in weightsForStep: ${totalNeuronEntries}`);
+    console.log(` [Debug] total neuron entries in weightsForStep: ${totalNeuronEntries}`);
 
-    // 🔍 DEBUG: flat list of **all** non-zero connections
+    //  DEBUG: flat list of **all** non-zero connections
     const allNonZero = [];
     Object.values(weightsForStep).forEach(macs =>
       Object.values(macs).forEach(cms =>
@@ -565,14 +609,14 @@ export class UIManager {
         )
       )
     );
-    console.log(`🛠️ [Debug] JSON non-zero Conns (${allNonZero.length}):`, allNonZero);
+    console.log(` [Debug] JSON non-zero Conns (${allNonZero.length}):`, allNonZero);
 
     // 3) Iterate through layer→mac→cm→neuron structure
     Object.entries(weightsForStep).forEach(([layerKey, macs]) => {
       Object.entries(macs).forEach(([macKey, cms]) => {
         Object.entries(cms).forEach(([cmKey, neurons]) => {
           Object.entries(neurons).forEach(([neuronKey, data]) => {
-            console.log(`🛠️ [Debug] processing ${layerKey} → ${macKey} → ${cmKey} → ${neuronKey} (sources: ${data.sources.length})`);
+            console.log(` [Debug] processing ${layerKey} → ${macKey} → ${cmKey} → ${neuronKey} (sources: ${data.sources.length})`);
 
             // Destination Three.js neuron object (1-based in UIManager)
             const macNum    = parseInt(macKey.split('_')[1], 10) + 1;
@@ -580,7 +624,7 @@ export class UIManager {
             const neuronNum = parseInt(neuronKey.split('_')[1], 10) + 1;
             const dest = this.neuronMap[layerKey]?.[macNum]?.[cmNum]?.[neuronNum];
             if (!dest) {
-              console.warn(`🔍 [Debug] Missing DEST for ${layerKey}.${macKey}.${cmKey}.${neuronKey}`, { layerKey, macNum, cmNum, neuronNum });
+              console.warn(` [Debug] Missing DEST for ${layerKey}.${macKey}.${cmKey}.${neuronKey}`, { layerKey, macNum, cmNum, neuronNum });
               return;
             }
 
@@ -589,8 +633,8 @@ export class UIManager {
               const w = src.weight;
               if (!w) return;  // skip zero weights
 
-              // 🔍 DEBUG show this source entry
-              console.log(`    ↳ [Debug] source[${idx}] coords=${src.sparsey_coords} weight=${w}`);
+              //  DEBUG show this source entry
+              console.log(`   [Debug] source[${idx}] coords=${src.sparsey_coords} weight=${w}`);
 
               // Find source object in the **previous** layer (or input grid)
               let sourceObj = null;
@@ -620,7 +664,7 @@ export class UIManager {
               }
 
               if (!sourceObj) {
-                console.warn(`🔍 [Debug] Missing SOURCE for srcCoords=${coords} → dest ${layerKey}.${macKey}.${cmKey}.${neuronKey}`);
+                console.warn(` [Debug] Missing SOURCE for srcCoords=${coords} → dest ${layerKey}.${macKey}.${cmKey}.${neuronKey}`);
                 return;
               }
 
@@ -632,7 +676,7 @@ export class UIManager {
 
               // 6) Track it for toggles & "Show All"
               const conn = { neuronA: sourceObj, neuronB: dest, mesh, weight: w };
-              this._dummyNeuronConnections.push(conn);
+              this._neuronConnections.push(conn);
               this._connectionRefCounts.set(conn, 0);
             });
           });
@@ -640,11 +684,9 @@ export class UIManager {
       });
     });
 
-    // 🔍 DEBUG summary of created connections:
-    console.log(`🛠️ [Debug] buildWeightedConnectionsForStep(${step}) created ${this._dummyNeuronConnections.length} connections.`);
+    //  DEBUG summary of created connections:
+    console.log(` [Debug] buildWeightedConnectionsForStep(${step}) created ${this._neuronConnections.length} connections.`);
   }
-
-
 
   /**
    * Helper: find all neurons inside a particular MAC group.
@@ -664,7 +706,7 @@ export class UIManager {
    */
   incrementConnectionRefCountForMac(macGroup) {
     const macNeurons = this.getNeuronsInMAC(macGroup);
-    for (const conn of this._dummyNeuronConnections) {
+    for (const conn of this._neuronConnections) {
       const neuronA = conn.neuronA;
       const neuronB = conn.neuronB;
       if (macNeurons.includes(neuronA) || macNeurons.includes(neuronB)) {
@@ -679,7 +721,7 @@ export class UIManager {
    */
   decrementConnectionRefCountForMac(macGroup) {
     const macNeurons = this.getNeuronsInMAC(macGroup);
-    for (const conn of this._dummyNeuronConnections) {
+    for (const conn of this._neuronConnections) {
       const neuronA = conn.neuronA;
       const neuronB = conn.neuronB;
       if (macNeurons.includes(neuronA) || macNeurons.includes(neuronB)) {
@@ -691,190 +733,204 @@ export class UIManager {
   }
 
   /**
- * Dynamically updates the "Individual Layer Controls" container.
- * Places each label to the left of its checkbox (MACs, CMs, Neurons).
- */
-updateUniformScaleSliders() {
-  const scaleContainer = document.getElementById('uniform-layer-scales');
-  if (!scaleContainer) return;
-
-  // 1) Clear out any previous controls, leaving only the header
-  while (scaleContainer.children.length > 1) {
-    scaleContainer.removeChild(scaleContainer.lastElementChild);
+   * @param {{[layerKey: string]: {[macIndex: number]: number}}} macProbs
+   */
+  updateMacProbabilities(macProbs) {
+    this.macProbs = macProbs;
+    // If a MAC is currently selected (canvas open), re-draw its bar graph:
+    this.selectedMACs.forEach(macGroup => {
+      const canvas = macGroup.userData.canvasWrapper
+        .querySelector('.bar-graph-canvas');
+      if (canvas) this.renderBarGraph(macGroup, canvas);
+    });
   }
 
-  // 2) Sort the layer keys: input first, then numeric layers in descending order
-  const zKeys = Object.keys(this.layerGroups)
-    .sort((a, b) => {
-      if (a === this.inputGridKey) return -1;
-      if (b === this.inputGridKey) return 1;
-      return Number(a) - Number(b);
-    })
-    .reverse();
 
-  // 3) Build a control block for each layer
-  zKeys.forEach((key, index) => {
-    // 3a) Determine a human‑readable name
-    let labelName;
-    if (key === this.inputGridKey) {
-      labelName = '- Input Layer -';
-    } else if (this.zToIndexMap && this.zToIndexMap[key] != null) {
-      labelName = `- Layer ${this.zToIndexMap[key]} -`;
-    } else {
-      labelName = `- Layer Z=${key} -`;
+  /**
+   * Dynamically updates the "Individual Layer Controls" container.
+   * Places each label to the left of its checkbox (MACs, CMs, Neurons).
+   */
+  updateUniformScaleSliders() {
+    const scaleContainer = document.getElementById('uniform-layer-scales');
+    if (!scaleContainer) return;
+
+    // 1) Clear out any previous controls, leaving only the header
+    while (scaleContainer.children.length > 1) {
+      scaleContainer.removeChild(scaleContainer.lastElementChild);
     }
 
-    // 3b) Create the container and subheading
-    const layerContainer = document.createElement('div');
-    layerContainer.className = 'layer-container';
+    // 2) Sort the layer keys: input first, then numeric layers in descending order
+    const zKeys = Object.keys(this.layerGroups)
+      .sort((a, b) => {
+        if (a === this.inputGridKey) return -1;
+        if (b === this.inputGridKey) return 1;
+        return Number(a) - Number(b);
+      })
+      .reverse();
 
-    const subheading = document.createElement('h5');
-    subheading.textContent = labelName;
-    subheading.className = 'layer-subheading';
-    layerContainer.appendChild(subheading);
+    // 3) Build a control block for each layer
+    zKeys.forEach((key, index) => {
+      // 3a) Determine a human‑readable name
+      let labelName;
+      if (key === this.inputGridKey) {
+        labelName = '- Input Layer -';
+      } else if (this.zToIndexMap && this.zToIndexMap[key] != null) {
+        labelName = `- Layer ${this.zToIndexMap[key]} -`;
+      } else {
+        labelName = `- Layer Z=${key} -`;
+      }
 
-    // 3c) Slider row
-    const sliderRow = document.createElement('div');
-    sliderRow.className = 'slider-row';
+      // 3b) Create the container and subheading
+      const layerContainer = document.createElement('div');
+      layerContainer.className = 'layer-container';
 
-    const scalingLabel = document.createElement('label');
-    scalingLabel.textContent = 'Scale:  ';
-    scalingLabel.className = 'scaling-label';
-    sliderRow.appendChild(scalingLabel);
+      const subheading = document.createElement('h5');
+      subheading.textContent = labelName;
+      subheading.className = 'layer-subheading';
+      layerContainer.appendChild(subheading);
 
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '0.1';
-    slider.max = '3.0';
-    slider.step = '0.05';
-    slider.value = '1.0';
-    slider.className = 'layer-slider';
-    slider.addEventListener('input', (evt) => {
-      const scaleVal = parseFloat(evt.target.value);
-      this.layerGroups[key].scale.set(scaleVal, scaleVal, scaleVal);
-      this.updateDummyNeuronConnections();
-      this.refreshConnectionVisibility();
-    });
-    sliderRow.appendChild(slider);
+      // 3c) Slider row
+      const sliderRow = document.createElement('div');
+      sliderRow.className = 'slider-row';
 
-    const resetBtn = document.createElement('button');
-    resetBtn.textContent = 'Reset';
-    resetBtn.className = 'slider-reset-btn';
-    resetBtn.addEventListener('click', () => {
+      const scalingLabel = document.createElement('label');
+      scalingLabel.textContent = 'Scale:  ';
+      scalingLabel.className = 'scaling-label';
+      sliderRow.appendChild(scalingLabel);
+
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = '0.1';
+      slider.max = '3.0';
+      slider.step = '0.05';
       slider.value = '1.0';
-      this.layerGroups[key].scale.set(1, 1, 1);
-      this.updateDummyNeuronConnections();
-      this.refreshConnectionVisibility();
-    });
-    sliderRow.appendChild(resetBtn);
+      slider.className = 'layer-slider';
+      slider.addEventListener('input', (evt) => {
+        const scaleVal = parseFloat(evt.target.value);
+        this.layerGroups[key].scale.set(scaleVal, scaleVal, scaleVal);
+        this.updateWeightedConnections();
+        this.refreshConnectionVisibility();
+      });
+      sliderRow.appendChild(slider);
 
-    layerContainer.appendChild(sliderRow);
+      const resetBtn = document.createElement('button');
+      resetBtn.textContent = 'Reset';
+      resetBtn.className = 'slider-reset-btn';
+      resetBtn.addEventListener('click', () => {
+        slider.value = '1.0';
+        this.layerGroups[key].scale.set(1, 1, 1);
+        this.updateWeightedConnections();
+        this.refreshConnectionVisibility();
+      });
+      sliderRow.appendChild(resetBtn);
 
-    // 3d) Toggles for MACs, CMs, Neurons (skip input layer)
-    if (key !== this.inputGridKey) {
-      const toggleRow = document.createElement('div');
-      toggleRow.className = 'toggle-row';
+      layerContainer.appendChild(sliderRow);
 
-      // Header
-      const prefix = document.createElement('span');
-      prefix.textContent = 'Show:';
-      prefix.className = 'toggle-prefix';
-      toggleRow.appendChild(prefix);
+      // 3d) Toggles for MACs, CMs, Neurons (skip input layer)
+      if (key !== this.inputGridKey) {
+        const toggleRow = document.createElement('div');
+        toggleRow.className = 'toggle-row';
 
-      // -- MACs --
-      const macLabel = document.createElement('label');
-      macLabel.htmlFor = `toggle-mac-${key}`;
-      macLabel.textContent = 'MACs';
-      toggleRow.appendChild(macLabel);
+        // Header
+        const prefix = document.createElement('span');
+        prefix.textContent = 'Show:';
+        prefix.className = 'toggle-prefix';
+        toggleRow.appendChild(prefix);
 
-      const macCheckbox = document.createElement('input');
-      macCheckbox.type = 'checkbox';
-      macCheckbox.id = `toggle-mac-${key}`;
-      macCheckbox.checked = true;
-      toggleRow.appendChild(macCheckbox);
+        // -- MACs --
+        const macLabel = document.createElement('label');
+        macLabel.htmlFor = `toggle-mac-${key}`;
+        macLabel.textContent = 'MACs';
+        toggleRow.appendChild(macLabel);
 
-      // -- CMs --
-      const cmLabel = document.createElement('label');
-      cmLabel.htmlFor = `toggle-cm-${key}`;
-      cmLabel.textContent = 'CMs';
-      toggleRow.appendChild(cmLabel);
+        const macCheckbox = document.createElement('input');
+        macCheckbox.type = 'checkbox';
+        macCheckbox.id = `toggle-mac-${key}`;
+        macCheckbox.checked = true;
+        toggleRow.appendChild(macCheckbox);
 
-      const cmCheckbox = document.createElement('input');
-      cmCheckbox.type = 'checkbox';
-      cmCheckbox.id = `toggle-cm-${key}`;
-      cmCheckbox.checked = true;
-      toggleRow.appendChild(cmCheckbox);
+        // -- CMs --
+        const cmLabel = document.createElement('label');
+        cmLabel.htmlFor = `toggle-cm-${key}`;
+        cmLabel.textContent = 'CMs';
+        toggleRow.appendChild(cmLabel);
 
-      // -- Neurons --
-      const neuronLabel = document.createElement('label');
-      neuronLabel.htmlFor = `toggle-neuron-${key}`;
-      neuronLabel.textContent = 'Neurons';
-      toggleRow.appendChild(neuronLabel);
+        const cmCheckbox = document.createElement('input');
+        cmCheckbox.type = 'checkbox';
+        cmCheckbox.id = `toggle-cm-${key}`;
+        cmCheckbox.checked = true;
+        toggleRow.appendChild(cmCheckbox);
 
-      const neuronCheckbox = document.createElement('input');
-      neuronCheckbox.type = 'checkbox';
-      neuronCheckbox.id = `toggle-neuron-${key}`;
-      neuronCheckbox.checked = true;
-      toggleRow.appendChild(neuronCheckbox);
+        // -- Neurons --
+        const neuronLabel = document.createElement('label');
+        neuronLabel.htmlFor = `toggle-neuron-${key}`;
+        neuronLabel.textContent = 'Neurons';
+        toggleRow.appendChild(neuronLabel);
 
-      // 3e) Event listeners (exactly your original logic)
-      macCheckbox.addEventListener('change', () => {
-        const show = macCheckbox.checked;
-        if (this.layerGroups[key]) {
-          this.layerGroups[key].traverse(child => {
-            if (child.userData && child.userData.isMacVisual) {
-              child.visible = show;
-            }
-          });
-          if (show) {
+        const neuronCheckbox = document.createElement('input');
+        neuronCheckbox.type = 'checkbox';
+        neuronCheckbox.id = `toggle-neuron-${key}`;
+        neuronCheckbox.checked = true;
+        toggleRow.appendChild(neuronCheckbox);
+
+        // 3e) Event listeners (exactly your original logic)
+        macCheckbox.addEventListener('change', () => {
+          const show = macCheckbox.checked;
+          if (this.layerGroups[key]) {
             this.layerGroups[key].traverse(child => {
-              if (child.userData && child.userData.type === 'mac' && !this.clickableMACs.includes(child)) {
-                this.clickableMACs.push(child);
+              if (child.userData && child.userData.isMacVisual) {
+                child.visible = show;
               }
             });
-          } else {
+            if (show) {
+              this.layerGroups[key].traverse(child => {
+                if (child.userData && child.userData.type === 'mac' && !this.clickableMACs.includes(child)) {
+                  this.clickableMACs.push(child);
+                }
+              });
+            } else {
+              this.layerGroups[key].traverse(child => {
+                if (child.userData && child.userData.type === 'mac') {
+                  const idx = this.clickableMACs.indexOf(child);
+                  if (idx > -1) this.clickableMACs.splice(idx, 1);
+                }
+              });
+            }
+          }
+        });
+        cmCheckbox.addEventListener('change', () => {
+          const show = cmCheckbox.checked;
+          if (this.layerGroups[key]) {
             this.layerGroups[key].traverse(child => {
-              if (child.userData && child.userData.type === 'mac') {
-                const idx = this.clickableMACs.indexOf(child);
-                if (idx > -1) this.clickableMACs.splice(idx, 1);
+              if (child.userData && child.userData.type === 'cm') {
+                child.visible = show;
               }
             });
           }
-        }
-      });
-      cmCheckbox.addEventListener('change', () => {
-        const show = cmCheckbox.checked;
-        if (this.layerGroups[key]) {
-          this.layerGroups[key].traverse(child => {
-            if (child.userData && child.userData.type === 'cm') {
-              child.visible = show;
-            }
-          });
-        }
-      });
-      neuronCheckbox.addEventListener('change', () => {
-        const show = neuronCheckbox.checked;
-        if (this.layerGroups[key]) {
-          this.layerGroups[key].traverse(child => {
-            if (child.userData && child.userData.type === 'neuron') {
-              child.visible = show;
-            }
-          });
-        }
-      });
+        });
+        neuronCheckbox.addEventListener('change', () => {
+          const show = neuronCheckbox.checked;
+          if (this.layerGroups[key]) {
+            this.layerGroups[key].traverse(child => {
+              if (child.userData && child.userData.type === 'neuron') {
+                child.visible = show;
+              }
+            });
+          }
+        });
 
-      layerContainer.appendChild(toggleRow);
-    }
+        layerContainer.appendChild(toggleRow);
+      }
 
-    // Insert a divider _above_ every layer
-    const divider = document.createElement('hr');
-    divider.className = 'slider-divider';
-    scaleContainer.appendChild(divider);
-    
-    // Now append the layer’s controls
-    scaleContainer.appendChild(layerContainer);
-  });
-}
+      // Insert a divider _above_ every layer
+      const divider = document.createElement('hr');
+      divider.className = 'slider-divider';
+      scaleContainer.appendChild(divider);
+      
+      // Now append the layer’s controls
+      scaleContainer.appendChild(layerContainer);
+    });
+  }
 
   /**
    * Attaches event listeners to the static Full Model Controls.
@@ -957,7 +1013,7 @@ updateUniformScaleSliders() {
         }
 
         // 5) Recompute connections so geometry matches the new scale/position
-        this.updateDummyNeuronConnections();
+        this.updateWeightedConnections();
 
         // 6) Refresh final visibility
         this.refreshConnectionVisibility();
@@ -984,7 +1040,7 @@ updateUniformScaleSliders() {
     }
 
     // Recompute arcs/lines
-    this.updateDummyNeuronConnections();
+    this.updateWeightedConnections();
     // Then apply final visibility logic
     this.refreshConnectionVisibility();
   }
@@ -1082,7 +1138,7 @@ updateUniformScaleSliders() {
       // ② DEBUG: list which connections belong to this MAC
       console.log(
         `Weighted connections for MAC ${macGroup.userData.layerKey}.${macGroup.userData.macIndex}:`,
-        this._dummyNeuronConnections.filter(conn =>
+        this._neuronConnections.filter(conn =>
           this.getNeuronsInMAC(macGroup).includes(conn.neuronA) ||
           this.getNeuronsInMAC(macGroup).includes(conn.neuronB)
         )
@@ -1129,7 +1185,7 @@ updateUniformScaleSliders() {
     this.clickableMACs.forEach(macGroup => {
       macGroup.userData.canvasWrapper = null;
     });
-    for (const conn of this._dummyNeuronConnections) {
+    for (const conn of this._neuronConnections) {
       this._connectionRefCounts.set(conn, 0);
     }
     this.refreshConnectionVisibility();
@@ -1250,27 +1306,35 @@ updateUniformScaleSliders() {
   renderBarGraph(macGroup, canvas) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Dummy bar graph
-    const sampleData = Array.from({ length: 40 }, () => Math.random());
-    const fixedBarWidth = 10;
-    const gap = 8;
-    const offsetX = 0;
-    const maxBarHeight = canvas.height - 20;
   
-    sampleData.forEach((value, index) => {
-      const barHeight = value * maxBarHeight;
-      const x = offsetX + index * (fixedBarWidth + gap);
-      const y = canvas.height - barHeight - 10;
-      ctx.fillStyle = '#007bff';
-      ctx.fillRect(x, y, fixedBarWidth, barHeight);
+    const layerKey = macGroup.userData.layerKey;
+    const totalMACs = this.macCounts[layerKey] || 0;
+  
+    // Build an array [p0, p1, … pN-1], zero-filling missing MACs
+    const data = Array.from({ length: totalMACs }, (_, i) =>
+      (this.macProbs[layerKey]?.[i]) || 0
+    );
+  
+    const fixedBarWidth = 10;
+    const gap           = 8;
+    const maxBarHeight  = canvas.height - 20;
+  
+    data.forEach((val, idx) => {
+      const h = val * maxBarHeight;
+      const x = idx * (fixedBarWidth + gap);
+      const y = canvas.height - h - 10;
+  
+      ctx.fillStyle   = val > 0 ? '#007bff' : '#ccc';
+      ctx.fillRect(x, y, fixedBarWidth, h);
       ctx.strokeStyle = '#000';
-      ctx.strokeRect(x, y, fixedBarWidth, barHeight);
+      ctx.strokeRect(x, y, fixedBarWidth, h);
+  
       ctx.fillStyle = '#000';
-      ctx.font = '10px Helvetica';
+      ctx.font      = '10px Helvetica';
       ctx.textAlign = 'center';
-      ctx.fillText(index + 1, x + fixedBarWidth / 2, canvas.height - 2);
+      ctx.fillText(idx + 1, x + fixedBarWidth/2, canvas.height - 2);
     });
-  }
+  }   
   
   resetOutlineColor(group) {
     group.traverse(child => {
@@ -1313,7 +1377,7 @@ updateUniformScaleSliders() {
   
   updateProjectDropdown(projects) {
     if (!this.projectSelect) {
-      console.error('❌ projectSelect element not found!');
+      console.error('projectSelect element not found!');
       return;
     }
     this.projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
@@ -1457,7 +1521,6 @@ updateUniformScaleSliders() {
 
   /**
    * Recolor every neuron mesh: black if active (true) at this step, white otherwise.
-   * Assumes your parser built:
    *   neuronActs = {
    *     layer_1: {
    *       1: {            // macIndex
@@ -1481,7 +1544,7 @@ updateUniformScaleSliders() {
       const cmMap     = layerMap[macIndex]     || {};
       const neuronMap = cmMap[cmIndex]         || {};
 
-      // 👇 one-based lookup: JSON keys are "1","2",… not "0","1",…
+      // one-based lookup: JSON keys are "1","2",… not "0","1",…
       const isActive = Boolean(neuronMap[neuronIndex]);
 
       // reset and recolor

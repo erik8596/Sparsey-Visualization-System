@@ -3,128 +3,90 @@
 import { eventBus } from './app.js';
 
 export class SceneManager {
-  constructor() {
+  constructor(containerId) {
     // Create scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xffffff);  // White background
+    this.scene.background = new THREE.Color(0xffffff);
 
     // Get container dimensions
-    const container = document.getElementById('threejs-container');
+    const container = document.getElementById(containerId);
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // Create camera
-    this.camera = new THREE.PerspectiveCamera(
-      75, // Field of view
-      width / height, // Aspect ratio
-      0.1, // Near plane
-      1000 // Far plane
-    );
+    // Camera
+    this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     this.camera.position.set(0, 0, 50);
 
-    // Create renderer
+    // Renderers
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(width, height);
     container.appendChild(this.renderer.domElement);
 
-    // Create shared top renderer for side panel snapshots
     this.sharedTopRenderer = new THREE.WebGLRenderer({ antialias: true });
     this.sharedTopRenderer.setSize(200, 200);
     this.sharedTopRenderer.setClearColor(0xffffff, 1);
 
-    // Create OrbitControls
+    // Controls
     this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
     this.controls.maxDistance = 200;
     this.controls.screenSpacePanning = false;
-    this.controls.mouseButtons = {
-      LEFT: THREE.MOUSE.ROTATE,
-      MIDDLE: THREE.MOUSE.DOLLY,
-      RIGHT: THREE.MOUSE.PAN
-    };
+    // initial mouseButtons and angles are set in setControls below
+    this.setControls({ rotate: true, pan: true });
 
-    // Create raycaster and mouse vector for interaction
+    // Raycaster & interaction
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
 
-    // Store MAC objects
+    // Storage
     this.macs = [];
 
-    // Setup event listeners
+    // Events & loop
     this.setupEventListeners();
-
-    // Start animation loop
     this.animate();
+  }
+
+  /** 
+   * Apply rotate/pan mode and angle limits in one place. 
+   * @param {{rotate:boolean, pan:boolean, azimuth?:[number,number], polar?:[number,number]}} opts 
+   */
+  setControls({
+    rotate = true,
+    pan    = true,
+    azimuth = [-Infinity, Infinity],
+    polar   = [0, Math.PI]
+  } = {}) {
+    this.controls.enableRotate = rotate;
+    this.controls.enablePan    = pan;
+
+    this.controls.mouseButtons = {
+      LEFT:   rotate ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT:  THREE.MOUSE.PAN
+    };
+
+    this.controls.minAzimuthAngle = azimuth[0];
+    this.controls.maxAzimuthAngle = azimuth[1];
+    this.controls.minPolarAngle   = polar[0];
+    this.controls.maxPolarAngle   = polar[1];
   }
 
   setupEventListeners() {
     window.addEventListener('resize', () => this.onWindowResize(), false);
 
-    // Handle scene clicks
+    // click interactions
     this.renderer.domElement.addEventListener('click', (event) => {
       eventBus.notify('sceneClicked', event);
     });
 
-    // Setup camera control buttons
-    const panButton = document.getElementById('panButton');
-    if (panButton) {
-      panButton.addEventListener('click', () => {
-        this.controls.enableRotate = false;
-        this.controls.enablePan = true;
-        this.controls.mouseButtons = {
-          LEFT: THREE.MOUSE.PAN,
-          MIDDLE: THREE.MOUSE.DOLLY,
-          RIGHT: THREE.MOUSE.PAN
-        };
-        console.log("Pan mode enabled");
-      });
-    }
-
-    const bothButton = document.getElementById('bothButton');
-    if (bothButton) {
-      bothButton.addEventListener('click', () => {
-        this.controls.enableRotate = true;
-        this.controls.enablePan = true;
-        this.controls.mouseButtons = {
-          LEFT: THREE.MOUSE.ROTATE,
-          MIDDLE: THREE.MOUSE.DOLLY,
-          RIGHT: THREE.MOUSE.PAN
-        };
-        // Reset angle limitations
-        this.controls.minAzimuthAngle = -Infinity;
-        this.controls.maxAzimuthAngle = Infinity;
-        this.controls.minPolarAngle = 0;
-        this.controls.maxPolarAngle = Math.PI;
-        console.log("Default mode enabled (rotate & pan)");
-      });
-    }
-
-    const resetControls = document.getElementById('resetControls');
-    if (resetControls) {
-      resetControls.addEventListener('click', () => {
-        this.controls.enableRotate = true;
-        this.controls.enablePan = true;
-        this.controls.mouseButtons = {
-          LEFT: THREE.MOUSE.ROTATE,
-          MIDDLE: THREE.MOUSE.DOLLY,
-          RIGHT: THREE.MOUSE.PAN
-        };
-        this.controls.minAzimuthAngle = -Infinity;
-        this.controls.maxAzimuthAngle = Infinity;
-        this.controls.minPolarAngle = 0;
-        this.controls.maxPolarAngle = Math.PI;
-        this.controls.reset();
-        console.log("Controls reset");
-      });
-    }
+    // (camera button wiring removed; now lives in app.js)
   }
 
   onWindowResize() {
     const container = document.getElementById('threejs-container');
     const width = container.clientWidth;
     const height = container.clientHeight;
-
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
@@ -136,13 +98,8 @@ export class SceneManager {
     this.renderer.render(this.scene, this.camera);
   }
 
-  add(object) {
-    this.scene.add(object);
-  }
-
-  remove(object) {
-    this.scene.remove(object);
-  }
+  add(obj)    { this.scene.add(obj); }
+  remove(obj) { this.scene.remove(obj); }
 
   startRotateLeft() {
     if (!this.rotateInterval) {
@@ -163,9 +120,7 @@ export class SceneManager {
   }
 
   stopRotate() {
-    if (this.rotateInterval) {
-      clearInterval(this.rotateInterval);
-      this.rotateInterval = null;
-    }
+    clearInterval(this.rotateInterval);
+    this.rotateInterval = null;
   }
 }
