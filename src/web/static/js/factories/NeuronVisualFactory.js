@@ -5,7 +5,7 @@ import { VisualFactory } from './VisualFactory.js';
 export class NeuronVisualFactory extends VisualFactory {
   create(element, layerCenter, mac_spacing) {
     // 1) Build the circular path (radius 0.10, 20 segments)
-    const shape = this.drawShapePath(0.10, 20);
+    const shape = this.drawShapePath(0.10, 14);
 
     // 2) Choose fill parameters based on active / previousActive
     let meshOpts, zOffset, renderOrder;

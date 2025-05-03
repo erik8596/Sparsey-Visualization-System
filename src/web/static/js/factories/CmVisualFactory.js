@@ -5,7 +5,7 @@ import { VisualFactory } from './VisualFactory.js';
 export class CmVisualFactory extends VisualFactory {
   create(element, layerCenter, mac_spacing) {
     // 1) Build the circle outline path (radius 0.4, 20 segments)
-    const shape = this.drawShapePath(0.4, 20);
+    const shape = this.drawShapePath(0.4, 14);
 
     // 2) Create only the outline (black, linewidth 2)
     const loop = this.createOutline(shape, { color: 0x000000, linewidth: 2 }, 0, 0);
