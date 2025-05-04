@@ -29,6 +29,3 @@ GET {{baseUrl}}/api/{{project_name}}/{{run_id}}/{{step}}/weight_connections
 
 ### get status
 GET {{baseUrl}}/api/status
-
-### get mac activation probabilities
-GET {{baseUrl}}/api/{project_name}/{run_id}/{{step}}/history

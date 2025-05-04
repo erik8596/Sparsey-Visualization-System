@@ -135,24 +135,6 @@
         body.classList.toggle('panel-open-2', open);
         body.classList.toggle('panel-closed-2', !open);
       });
-
-      // === NEW: populate the inputSelect ===
-      const inputSelect = document.getElementById('inputSelect');
-      if (inputSelect) {
-        // Create 100 dummy inputs
-        for (let i = 1; i <= 100; i++) {
-          const opt = document.createElement('option');
-          opt.value = i;
-          opt.textContent = `Input ${i}`;
-          inputSelect.appendChild(opt);
-        }
-
-        // (Optional) handle selection events
-        inputSelect.addEventListener('change', (e) => {
-          console.log('User selected input ID:', e.target.value);
-          // TODO: wire up behavior when you have real inputs
-        });
-      }
     });
   </script>
 </body>
