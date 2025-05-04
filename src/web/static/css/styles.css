@@ -326,13 +326,61 @@ body.panel-open-2 #toggle-panel-btn-2 {
   font-weight: 400;
 }
 .bar-graph-scroll-container {
-  width: 200px;
- 	margin: 0 auto;
+  width: 180px;
+   margin: 0 auto;
   overflow-x: auto;
 }
 .bar-graph-canvas {
   display: block;
-  margin-top: 5px;
+  margin-top: 0px;
+  border: 1px solid var(--color-border-light);
+}
+
+.mac-canvas-wrapper {
+  /* make the CM-charts flow in rows */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;              /* space between CM-canvases */
+  margin-bottom: 4px;    /* keep your existing spacing */
+  text-align: center;    /* you already had this */
+}
+
+/* ensure the CM-charts container wraps them in rows */
+.cm-charts-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* each little CM chart */
+.cm-chart-container {
+  display: inline-block;
+  text-align: center;
+}
+
+/* the CM label above each mini-chart */
+.cm-chart-label {
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+/* small “CM X” label above each mini‐chart */
+.cm-small-label {
+  font-size: 0.75rem;
+  margin-bottom: 0px;
+}
+
+/* each mini‐chart wrapper */
+.cm-chart-container {
+  display: inline-block;
+  text-align: center;
+}
+
+/* match your existing bar‐graph styling */
+.bar-graph-canvas {
   border: 1px solid var(--color-border-light);
 }
 
@@ -354,14 +402,19 @@ body.panel-open-2 #toggle-panel-btn-2 {
   font-style: italic;
   line-height: 1;
 }
-.toggle-row input[type="checkbox"] {	margin-right: 0.8rem;
+.toggle-row input[type="checkbox"] {
+  margin-right: 0.8rem;
 }
 
 /* Visualize button width */
-#visualizeButton { width: 100px; }
+#visualizeButton {
+  width: 100px;
+}
 
 /* Side-panel left border override */
-#side-panel { border-left: 3px solid var(--color-border-dark); }
+#side-panel {
+  border-left: 3px solid var(--color-border-dark);
+}
 
 /* Reset Toggled MACs button styling */
 #resetButton {
@@ -389,4 +442,27 @@ body.panel-open-2 #toggle-panel-btn-2 {
   font-weight: bold;
   text-align: center;
   cursor: pointer;
+}
+
+/* -- New: Ensure exactly two CM charts per line -- */
+.cm-chart-container {
+  flex: 0 0 calc(50% - 4px);
+}
+
+.cm-charts-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.cm-charts-subheader {
+  /* span both columns so it sits above the charts */
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin: 8px 0 4px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
 }

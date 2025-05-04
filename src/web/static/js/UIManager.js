@@ -459,52 +459,55 @@ export class UIManager {
    *   - top-down  (layerA > layerB) => magenta
    *   - same layer => green
    */
+    /**
+   * Creates either an arc (TubeGeometry) for same-layer
+   * or a straight Line for cross-layer, colored by direction.
+   */
   createNeuronConnectionMesh(neuronA, neuronB, weight) {
+    // 1) grab world positions
     const posA = new THREE.Vector3();
     const posB = new THREE.Vector3();
     neuronA.getWorldPosition(posA);
     neuronB.getWorldPosition(posB);
 
-    const layerA = neuronA.userData.layerIndex;
-    const layerB = neuronB.userData.layerIndex;
-    
+    // 2) determine same-layer by Z coordinate
+    const dz = posB.z - posA.z;
+    const sameLayer = Math.abs(dz) < 1e-6;
+
+    // 3) pick color
     let color;
-    if (layerA < layerB) {
-      // bottom-up
-      color = new THREE.Color("#0000FF"); // Blue
-    } else if (layerA > layerB) {
-      // top-down
-      color = new THREE.Color("#FF00FF"); // Magenta
+    if (sameLayer) {
+      color = new THREE.Color(0x00ff00);       // green
+    } else if (dz > 0) {
+      color = new THREE.Color(0x0000ff);       // blue (bottom→up)
     } else {
-      // same layer => green
-      color = new THREE.Color("#00FF00");
+      color = new THREE.Color(0xff00ff);       // magenta (top→down)
     }
 
-    // If same layer => tube arc; otherwise => line
-    if (layerA === layerB) {
-      // replace the fixed lift with a dynamic one
+    // 4) build mesh
+    let mesh;
+    if (sameLayer) {
+      // arc rising in Y so it bulges up on-screen
       const mid = posA.clone().lerp(posB, 0.5);
-
-      // compute how many layers apart this connection is
-      const layerDiff = Math.abs(layerA - layerB);
-
-      // if same layer, give it a small bump; otherwise base it on layerDiff
-      const lift = layerDiff > 0
-        ? layerDiff * this.layerSpacing * 0.5   // 50% of total layer separation
-        : this.layerSpacing * 0.3;              // 30% bump when layerDiff === 0
-      mid.z += lift;
-
+      mid.y += 5;  // tweak this “height” as you like
       const curve = new THREE.QuadraticBezierCurve3(posA, mid, posB);
-      const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.03, 8, false);
-      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7 });
-      return new THREE.Mesh(tubeGeo, mat);
+      const geo   = new THREE.TubeGeometry(curve, 20, 0.03, 8, false);
+      const mat   = new THREE.MeshBasicMaterial({ color });
+      mesh = new THREE.Mesh(geo, mat);
     } else {
-      const points = [posA, posB];
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const material = new THREE.LineBasicMaterial({ color });
-      return new THREE.Line(geometry, material);
+      // straight line for cross-layer
+      const pts = [ posA, posB ];
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({ color });
+      mesh = new THREE.Line(geo, mat);
     }
+
+    // 5) disable raycasting so it doesn’t intercept clicks
+    mesh.raycast = () => {};
+
+    return mesh;
   }
+
 
   /**
    * Recompute geometry for each neuron–neuron connection (arc or line)
@@ -733,17 +736,73 @@ export class UIManager {
   }
 
   /**
-   * @param {{[layerKey: string]: {[macIndex: number]: number}}} macProbs
+   * @param {{[layerKey: string]: {[macKey: string]: {[cmKey: string]: number[]}}}} macProbs
    */
   updateMacProbabilities(macProbs) {
     this.macProbs = macProbs;
-    // If a MAC is currently selected (canvas open), re-draw its bar graph:
+
     this.selectedMACs.forEach(macGroup => {
-      const canvas = macGroup.userData.canvasWrapper
-        .querySelector('.bar-graph-canvas');
-      if (canvas) this.renderBarGraph(macGroup, canvas);
+      const { layerKey, macIndex } = macGroup.userData;                // macIndex is 1-based
+      const cmMap = macProbs[layerKey]?.[`mac_${macIndex}`] || {};
+      const container = macGroup.userData.cmChartsContainer;
+
+      // 1) clear out old CM‐charts
+      container.innerHTML = '';
+
+      // 2) subheader under the MAC canvas
+      const subhdr = document.createElement('div');
+      subhdr.classList.add('cm-charts-subheader');
+      subhdr.textContent = 'Neuron Activation Probabilities / CM';
+      container.appendChild(subhdr);
+
+      // 3) one mini‐chart per CM
+      Object.entries(cmMap).forEach(([cmKey, neuronProbs]) => {
+        const cmNum = parseInt(cmKey.split('_')[1], 10);
+
+        const cmDiv = document.createElement('div');
+        cmDiv.classList.add('cm-chart-container');
+
+        // small CM label
+        const lbl = document.createElement('div');
+        lbl.classList.add('cm-small-label');
+        lbl.textContent = `CM ${cmNum}`;
+        cmDiv.appendChild(lbl);
+
+        // the bar‐graph canvas
+        const c = document.createElement('canvas');
+        c.width  = 100;
+        c.height = 80;
+        c.classList.add('bar-graph-canvas');
+        cmDiv.appendChild(c);
+
+        // draw the bars
+        const ctx = c.getContext('2d');
+        ctx.clearRect(0, 0, c.width, c.height);
+        const maxH = c.height - 20;
+        const gap  = 4;
+        const barW = (c.width - gap * (neuronProbs.length + 1)) / neuronProbs.length;
+
+        neuronProbs.forEach((p, i) => {
+          const h = p * maxH;
+          const x = gap + i * (barW + gap);
+          const y = c.height - h - 10;
+
+          ctx.fillStyle   = '#007bff';
+          ctx.fillRect(x, y, barW, h);
+          ctx.strokeRect(x, y, barW, h);
+
+          // neuron index
+          ctx.fillStyle = '#000';
+          ctx.font      = '10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(i + 1, x + barW / 2, c.height - 2);
+        });
+
+        container.appendChild(cmDiv);
+      });
     });
   }
+
 
 
   /**
@@ -1133,6 +1192,9 @@ export class UIManager {
       macGroup.userData.isSelected = true;
       this.selectedMACs.push(macGroup);
   
+      // ── repaint the per-CM bar-graphs using the latest data ──
+      this.updateMacProbabilities(this.macProbs);
+  
       // ① increment the refCounts so they become visible
       this.incrementConnectionRefCountForMac(macGroup);
       // ② DEBUG: list which connections belong to this MAC
@@ -1154,6 +1216,7 @@ export class UIManager {
       detailsDiv.innerHTML = `<p><strong>Layer:</strong> ${layerIndex}</p>`;
     }
   }
+  
   
   resetToggledMACs() {
     // turn everything off
@@ -1198,59 +1261,48 @@ export class UIManager {
     const containerDiv = document.createElement('div');
     containerDiv.classList.add('mac-canvas-wrapper');
   
+    // — Big header for MAC & layer
     const label = document.createElement('p');
     label.classList.add('mac-canvas-label');
-    label.textContent = `- MAC Layer ${macGroup.userData.layerIndex} -`;
+    const macNum   = macGroup.userData.macIndex;
+    const layerNum = macGroup.userData.layerIndex;
+    label.textContent = `MAC ${macNum} (Layer ${layerNum})`;
     containerDiv.appendChild(label);
   
+    // — Top-view mini-scene
     const topCanvas = document.createElement('canvas');
-    topCanvas.width = 200;
-    topCanvas.height = 200;
+    topCanvas.width  = 150;
+    topCanvas.height = 150;
     topCanvas.classList.add('mac-top-canvas');
     containerDiv.appendChild(topCanvas);
   
-    const barGraphLabel = document.createElement('p');
-    barGraphLabel.classList.add('bar-graph-label');
-    barGraphLabel.textContent = 'MAC Activation Probabilities:';
-    containerDiv.appendChild(barGraphLabel);
+    // — Placeholder DIV where per-CM charts go
+    const cmChartsContainer = document.createElement('div');
+    cmChartsContainer.classList.add('cm-charts-container');
+    containerDiv.appendChild(cmChartsContainer);
   
-    const barGraphScrollContainer = document.createElement('div');
-    barGraphScrollContainer.classList.add('bar-graph-scroll-container');
-    const barGraphCanvas = document.createElement('canvas');
-    barGraphCanvas.width = 800;
-    barGraphCanvas.height = 100;
-    barGraphCanvas.classList.add('bar-graph-canvas');
-    barGraphScrollContainer.appendChild(barGraphCanvas);
-    containerDiv.appendChild(barGraphScrollContainer);
-  
+    // — Wrap in the side-panel section as before
     const sidePanel = document.getElementById('side-panel');
-
-    // 1) Create a single “section” wrapper
-    const section = document.createElement('div');
+    const section   = document.createElement('div');
     section.className = 'mac-section';
-
-    // 2) If there’s already content, append the <hr> into *this* section
     if (sidePanel.children.length > 0) {
       const divider = document.createElement('hr');
       divider.className = 'slider-divider';
       section.appendChild(divider);
     }
-
-    // 3) Move your existing containerDiv into that same section
     section.appendChild(containerDiv);
-
-    // 4) Now append *only* the section
     sidePanel.appendChild(section);
-
-    // 5) Remember the section (for removal later) and the wrapper
-    macGroup.userData.canvasSection = section;
-    macGroup.userData.canvasWrapper = containerDiv;
-
+  
+    // — Remember for later updates
+    macGroup.userData.canvasSection      = section;
+    macGroup.userData.canvasWrapper      = containerDiv;
+    macGroup.userData.cmChartsContainer  = cmChartsContainer;
+  
+    // — Initial draws
     this.createTopView(macGroup, topCanvas);
-    this.renderBarGraph(macGroup, barGraphCanvas);
-
     return containerDiv;
   }
+  
   
   createTopView(macGroup, canvas) {
     if (!this.sharedTopRenderer) {
