@@ -16,6 +16,7 @@ class ModelConfig:
     neuron_activations: Dict[str, Dict[int, Dict[int, Dict[int, List[float]]]]] = field(default_factory=dict)
     input_activations: Dict[int, int] = field(default_factory=dict)
     weighted_connections: Dict = field(default_factory=dict)
+    activation_probabilities: Dict = field(default_factory=dict)
 
     def _extract_model_config(self, run: Any) -> Dict[str, Any]:
         """Extract and validate model configuration from run."""

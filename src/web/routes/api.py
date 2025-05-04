@@ -4,6 +4,7 @@ from src.core.model.processors.layered_strategy import LayeredVisualizationStrat
 from src.core.model.parsers.weight_connection_parser import WeightedConnectionsParser
 from src.core.model.parsers.mac_activation_parser import MACActivationParser
 from src.core.model.parsers.input_activation_parser import InputActivationParser
+from src.core.model.parsers.activation_probabilities_parser import ActivationProbabilitiesParser
 
 import os
 
@@ -12,6 +13,24 @@ api = Blueprint('api', __name__, url_prefix='/api')
 wbf = WandBFacade() # singleton instance
 lvs = LayeredVisualizationStrategy()
 DATA_ARTIFACT_STORE_PATH = os.environ.get('DATA_ARTIFACT_STORE_PATH', "data/artifact_store")
+
+# Define metric prefixes and exact keys to exclude from the generic /history endpoint
+EXCLUDED_HISTORY_PREFIXES = [
+    # metrics either not being processed or being routed differently
+    'activation_probabilities/', # Exclude all nested probability metrics
+    'activation_probabilities',
+    'weights',                 # Assuming weights are logged like weights/layer_1/... 
+    'num_activations/',         # Assuming num_activations are logged like num_activations/layer_1/...
+    'match_accuracy',           # Exclude this specific metric
+    'basis_average',            # Exclude this specific metric
+    'basis_set_size',           # Exclude this specific metric
+    'feature_coverage',
+    # metadata
+    '_runtime',
+    '_step',
+    '_timestamp',
+    # Add other prefixes (ending with '/') or exact keys here
+]
 
 @api.route('/')
 def index():
@@ -128,7 +147,24 @@ def get_run_history(project_name, run_id):
             run_id=run_id,
             project_name=project_name,
         )
-        return jsonify({'step_history': history})
+
+        if history is None or not history: # Check if history is None or empty
+            return jsonify({'error': 'No history found for run or history is empty'}), 404
+
+        # Filter the history
+        filtered_history = {}
+        for step, step_data in history.items():
+            filtered_step_data = {
+                key: value for key, value in step_data.items() 
+                # Keep keys starting with '_' OR keys that DO NOT start with any excluded prefix
+                if key.startswith('_') or not any(key.startswith(prefix) for prefix in EXCLUDED_HISTORY_PREFIXES)
+            }
+            # Only add step if it still has relevant data after filtering
+            # (excluding steps that *only* contained excluded metrics or underscore keys)
+            if any(not k.startswith('_') for k in filtered_step_data.keys()):
+                 filtered_history[step] = filtered_step_data
+
+        return jsonify({'step_history': filtered_history})
     except Exception as e:
         print(f"API: Error fetching run history - {str(e)}")
         return jsonify({'error': str(e), 'history': []}), 500
@@ -178,21 +214,16 @@ def get_weight_connections(project_name, run_id, step: int):
     Fetches and parses weight connections for a specific run and step.
     Uses caching and loads only the required artifact step from W&B if necessary.
     """
+    if project_name is None or run_id is None or step is None:
+        return jsonify({'error': 'Missing project name, run ID, or step'}), 400
+    
+    if project_name not in wbf.projects_list:
+        return jsonify({'error': f'Project {project_name} not found in entity {wbf.entity}'}), 404
+    
+    if run_id not in [run['id'] for run in wbf.project_runs]:
+        return jsonify({'error': f'Run {run_id} not found in project {project_name}'}), 404
+    
     try:
-        # 1. Set W&B Facade context to the correct run
-        #    First, ensure the facade knows about runs in this project
-        wbf.load_runs_from_project(project_name=project_name)
-        #    Then, attempt to update to the specific run
-        if not wbf.update_run(run_id=run_id, project_name=project_name):
-            return jsonify({"error": f"Run ID '{run_id}' not found in project '{project_name}'"}), 404
-
-        # 2. Ensure model configuration (layer/input dims) is loaded for the parser
-        model_config = wbf.get_processed_model_config(run_id=run_id, project_name=project_name)
-        if not model_config or not model_config.layers:
-             return jsonify({"error": "Failed to load model configuration for the run"}), 500
-        
-        # 3. Get the specific step data (loads from cache or W&B if needed)
-        # This method now loads the data into wbf.mconf.weighted_connections[step]
         step_data = wbf.get_weighted_connections_for_step(step)
         if step_data is None:
             # Error message/reason is printed by the facade method
@@ -214,6 +245,33 @@ def get_weight_connections(project_name, run_id, step: int):
         import traceback
         traceback.print_exc()
         return jsonify({'error': "An internal error occurred"}), 500
+    
+@api.route('/<project_name>/<run_id>/<int:step>/activation_probabilities', methods=['GET'])
+def get_activation_probabilities(project_name, run_id, step: int):
+    """
+    Fetches and parses activation probabilities at the neuron levelfor a specific run and step.
+    """
+    if project_name is None or run_id is None or step is None:
+        return jsonify({'error': 'Missing project name, run ID, or step'}), 400
+    
+    if project_name not in wbf.projects_list:
+        return jsonify({'error': f'Project {project_name} not found in entity {wbf.entity}'}), 404
+    
+    if run_id not in [run['id'] for run in wbf.project_runs]:
+        return jsonify({'error': f'Run {run_id} not found in project {project_name}'}), 404
+    
+    try:
+        acp = ActivationProbabilitiesParser(wbf=wbf)
+        acp.parse()
+        return jsonify(acp.get_step_probabilities(step))
+    except ValueError as ve:
+        print(f"API: Value error processing activation probabilities - {str(ve)}")
+        return jsonify({'error': f'Configuration or data error during parsing: {str(ve)}'}), 500
+    except Exception as e:
+        print(f"API: Error fetching activation probabilities for step {step} - {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
+
 
 @api.route('/status', methods=['GET'])
 def get_status():

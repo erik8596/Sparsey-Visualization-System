@@ -1,7 +1,7 @@
-@baseUrl = http://localhost:5000
+@baseUrl = http://localhost:8000
 @project_name = weights_testing
-@run_id = 3axyziyf
-@step = 0
+@run_id = 81di3zhg
+@step = 49
 
 ### get projects
 GET {{baseUrl}}/api/projects
@@ -26,6 +26,9 @@ GET {{baseUrl}}/api/{{project_name}}/{{run_id}}/visualize
 
 ### get weight connections
 GET {{baseUrl}}/api/{{project_name}}/{{run_id}}/{{step}}/weight_connections
+
+### get neuron activation probabilities
+GET {{baseUrl}}/api/{{project_name}}/{{run_id}}/{{step}}/activation_probabilities
 
 ### get status
 GET {{baseUrl}}/api/status

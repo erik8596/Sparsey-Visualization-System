@@ -1,8 +1,7 @@
 import torch
 import numpy as np
-import json
 from src.core.model.wandb.wandb_facade import WandBFacade
-from typing import Tuple, Dict, List, Any
+from typing import Tuple, Dict, Any
 
 class WeightedConnectionsParser:
     """Parser for weighted connections data from WandB, based on MAC-level connections."""
@@ -183,6 +182,22 @@ class WeightedConnectionsParser:
             if isinstance(connections_tensor, torch.Tensor): 
                 connections_tensor = connections_tensor.cpu().numpy()
 
+            # Handle case where loaded data might be a list
+            if isinstance(weights_tensor, list):
+                try:
+                    weights_tensor = np.array(weights_tensor)
+                    print(f"Note: Converted weights_tensor from list to numpy array for {layer_key}.")
+                except Exception as e:
+                    print(f"Warning: Failed to convert weights_tensor list to numpy array for {layer_key}: {e}. Skipping layer.")
+                    continue
+            if isinstance(connections_tensor, list):
+                try:
+                    connections_tensor = np.array(connections_tensor)
+                    print(f"Note: Converted connections_tensor from list to numpy array for {layer_key}.")
+                except Exception as e:
+                    print(f"Warning: Failed to convert connections_tensor list to numpy array for {layer_key}: {e}. Skipping layer.")
+                    continue
+
             # --- Dimension and Shape Validation --- 
             try:
                 dest_dims = self._get_layer_dims(dest_layer_index)
@@ -358,6 +373,22 @@ class WeightedConnectionsParser:
                 weights_tensor = weights_tensor.cpu().numpy()
             if isinstance(connections_tensor, torch.Tensor): 
                 connections_tensor = connections_tensor.cpu().numpy()
+
+            # Handle case where loaded data might be a list
+            if isinstance(weights_tensor, list):
+                try:
+                    weights_tensor = np.array(weights_tensor)
+                    print(f"Note: Converted weights_tensor from list to numpy array for {layer_key}.")
+                except Exception as e:
+                    print(f"Warning: Failed to convert weights_tensor list to numpy array for {layer_key}: {e}. Skipping layer.")
+                    continue
+            if isinstance(connections_tensor, list):
+                try:
+                    connections_tensor = np.array(connections_tensor)
+                    print(f"Note: Converted connections_tensor from list to numpy array for {layer_key}.")
+                except Exception as e:
+                    print(f"Warning: Failed to convert connections_tensor list to numpy array for {layer_key}: {e}. Skipping layer.")
+                    continue
 
             # --- Dimension and Shape Validation (similar to parse method) ---
             try:
