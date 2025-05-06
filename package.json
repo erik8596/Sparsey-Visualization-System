@@ -5,7 +5,7 @@
     "test:js": "vitest run tests/js/*.{js,mjs}",
     "test:js:watch": "vitest tests/js/*.{js,mjs}",
     "test:python": "pytest tests/python",
-    "test": "npm run test:python && npm run test:js"
+    "test": "node tests/js/run_integration_tests.mjs"
   },
   "devDependencies": {
     "vitest": "^1.0.0",
