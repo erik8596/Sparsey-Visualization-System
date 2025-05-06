@@ -19,7 +19,7 @@ EXCLUDED_HISTORY_PREFIXES = [
     # metrics either not being processed or being routed differently
     'activation_probabilities/', # Exclude all nested probability metrics
     'activation_probabilities',
-    'weights',                 # Assuming weights are logged like weights/layer_1/... 
+    'weights',                 # Assuming weights are logged like weights/layer_1/...
     'num_activations/',         # Assuming num_activations are logged like num_activations/layer_1/...
     'match_accuracy',           # Exclude this specific metric
     'basis_average',            # Exclude this specific metric
@@ -155,7 +155,7 @@ def get_run_history(project_name, run_id):
         filtered_history = {}
         for step, step_data in history.items():
             filtered_step_data = {
-                key: value for key, value in step_data.items() 
+                key: value for key, value in step_data.items()
                 # Keep keys starting with '_' OR keys that DO NOT start with any excluded prefix
                 if key.startswith('_') or not any(key.startswith(prefix) for prefix in EXCLUDED_HISTORY_PREFIXES)
             }
@@ -216,13 +216,13 @@ def get_weight_connections(project_name, run_id, step: int):
     """
     if project_name is None or run_id is None or step is None:
         return jsonify({'error': 'Missing project name, run ID, or step'}), 400
-    
+
     if project_name not in wbf.projects_list:
         return jsonify({'error': f'Project {project_name} not found in entity {wbf.entity}'}), 404
-    
+
     if run_id not in [run['id'] for run in wbf.project_runs]:
         return jsonify({'error': f'Run {run_id} not found in project {project_name}'}), 404
-    
+
     try:
         step_data = wbf.get_weighted_connections_for_step(step)
         if step_data is None:
@@ -235,42 +235,31 @@ def get_weight_connections(project_name, run_id, step: int):
         # 5. Parse the specific step data (already loaded into memory)
         parsed_connections = wcp.parse(step)
         return jsonify(parsed_connections)
-        
+
     except ValueError as ve: # Catch specific expected errors from parser
         print(f"API: Value error processing weight connections - {str(ve)}")
         return jsonify({'error': f'Configuration or data error during parsing: {str(ve)}'}), 500
-            
+
     except Exception as e:
         print(f"API: Unexpected error fetching weight connections for step {step} - {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': "An internal error occurred"}), 500
-    
-@api.route('/<project_name>/<run_id>/<int:step>/activation_probabilities', methods=['GET'])
-def get_activation_probabilities(project_name, run_id, step: int):
-    """
-    Fetches and parses activation probabilities at the neuron levelfor a specific run and step.
-    """
-    if project_name is None or run_id is None or step is None:
-        return jsonify({'error': 'Missing project name, run ID, or step'}), 400
-    
-    if project_name not in wbf.projects_list:
-        return jsonify({'error': f'Project {project_name} not found in entity {wbf.entity}'}), 404
-    
-    if run_id not in [run['id'] for run in wbf.project_runs]:
-        return jsonify({'error': f'Run {run_id} not found in project {project_name}'}), 404
-    
+
+@api.route('/<project_name>/<run_id>/<step>/activation_probabilities', methods=['GET'])
+def get_activation_probabilities(project_name, run_id, step):
+    """Get MAC activation probabilities for a specific step"""
     try:
-        acp = ActivationProbabilitiesParser(wbf=wbf)
-        acp.parse()
-        return jsonify(acp.get_step_probabilities(step))
-    except ValueError as ve:
-        print(f"API: Value error processing activation probabilities - {str(ve)}")
-        return jsonify({'error': f'Configuration or data error during parsing: {str(ve)}'}), 500
+        # Get the activation probabilities parser
+        parser = ActivationProbabilitiesParser(wbf)
+        # Parse the probabilities
+        probabilities = parser.parse()
+        # Get the probabilities for the specified step
+        step_probs = parser.get_step_probabilities(int(step))
+        # Return the probabilities
+        return jsonify(step_probs)
     except Exception as e:
-        print(f"API: Error fetching activation probabilities for step {step} - {str(e)}")
-        return jsonify({'error': str(e)}), 500
-    
+        return jsonify({"error": str(e)}), 500
 
 
 @api.route('/status', methods=['GET'])
@@ -279,4 +268,3 @@ def get_status():
     Fetches a status of the current W&B project and run.
     """
     return jsonify(wbf.status())
-
