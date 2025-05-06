@@ -841,11 +841,11 @@ def test_step_navigation_api(client, mocker):
 
         # Return different neuron activations based on step
         if step == 0:
-            mock_config.neuron_activations = {"layer_1": {1: {1: {1: True}}}
+            mock_config.neuron_activations = {"layer_1": {1: {1: {1: True}}}}
         elif step == 1:
-            mock_config.neuron_activations = {"layer_1": {1: {1: {1: False}}}
+            mock_config.neuron_activations = {"layer_1": {1: {1: {1: False}}}}
         else:
-            mock_config.neuron_activations = {"layer_1": {1: {1: {1: True}}}
+            mock_config.neuron_activations = {"layer_1": {1: {1: {1: True}}}}
 
         return mock_config
 
