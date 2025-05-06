@@ -671,7 +671,6 @@ def test_weighted_connections_visualization(client, mocker):
     assert connection2["weight"] == 0.6
     assert connection2["visible"] == True
 
-
 # TC-026: Panning Navigation Tests
 def test_panning_navigation(client, mocker):
     """Test panning around a rendered Sparsey instance (TC-026)"""
@@ -808,3 +807,61 @@ def test_zoom_navigation(client, mocker):
     assert response.status_code == 200
     camera_state = response.get_json()
     assert camera_state["position"]["z"] == 20  # Z should be constrained to minimum
+
+# TC-030: Step Navigation API Tests
+def test_step_navigation_api(client, mocker):
+    """Test that users can retrieve and navigate through steps in a run (TC-030)"""
+    # Mock run history data with multiple steps
+    mock_history = [
+        {"_step": 0, "metric_1": 0.1, "neuron_activations/layer_1/mac_1/cm_1/neuron_1": 1.0},
+        {"_step": 1, "metric_1": 0.2, "neuron_activations/layer_1/mac_1/cm_1/neuron_1": 0.0},
+        {"_step": 2, "metric_1": 0.3, "neuron_activations/layer_1/mac_1/cm_1/neuron_1": 1.0}
+    ]
+
+    # Mock the run object with history
+    mock_run = mocker.MagicMock()
+    mock_run.scan_history.return_value = mock_history
+
+    # Mock fetch_run to return our mock run
+    mocker.patch("src.core.model.wandb.wandb_facade.WandBFacade.fetch_run",
+                return_value=mock_run)
+
+    # Test steps endpoint
+    response = client.get("/api/test_project/test_run/steps")
+    assert response.status_code == 200
+    steps_data = response.get_json()
+    assert "steps" in steps_data
+    assert steps_data["steps"] == [0, 1, 2]
+
+    # Mock get_processed_model_config for different steps
+    def mock_get_processed_config(run_id, project_name, step=None):
+        mock_config = mocker.MagicMock()
+        mock_config.layers = {"layer_1": {"params": {}}}
+        mock_config.input_dimensions = {"width": 4, "height": 4}
+
+        # Return different neuron activations based on step
+        if step == 0:
+            mock_config.neuron_activations = {"layer_1": {1: {1: {1: True}}}
+        elif step == 1:
+            mock_config.neuron_activations = {"layer_1": {1: {1: {1: False}}}
+        else:
+            mock_config.neuron_activations = {"layer_1": {1: {1: {1: True}}}
+
+        return mock_config
+
+    mocker.patch("src.core.model.wandb.wandb_facade.WandBFacade.get_processed_model_config",
+                side_effect=mock_get_processed_config)
+
+    # Test visualization with step 0
+    response = client.get("/api/test_project/test_run/visualize?step=0")
+    assert response.status_code == 200
+    vis_data = response.get_json()
+    # Check neuron activations for step 0
+    assert vis_data["neuron_activations"]["layer_1"][1][1][1] == True
+
+    # Test visualization with step 1
+    response = client.get("/api/test_project/test_run/visualize?step=1")
+    assert response.status_code == 200
+    vis_data = response.get_json()
+    # Check neuron activations for step 1
+    assert vis_data["neuron_activations"]["layer_1"][1][1][1] == False
