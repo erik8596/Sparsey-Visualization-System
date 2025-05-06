@@ -1,23 +1,24 @@
 // /static/js/SceneManager.js
-// Manages the Three.js scene, camera, renderer, and animation loop.
+// Manages the Three.js scene, camera, renderer, animation loop ― *plus a
+// couple of scene‑level helpers that used to live in UIManager.*
+
 import { eventBus } from './app.js';
 
 export class SceneManager {
   constructor(containerId) {
-    // Create scene
+    /* ───────────────────────────────────────────────────────── scene setup */
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xffffff);
 
-    // Get container dimensions
     const container = document.getElementById(containerId);
-    const width = container.clientWidth;
+    const width  = container.clientWidth;
     const height = container.clientHeight;
 
-    // Camera
+    /* camera */
     this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     this.camera.position.set(0, 0, 50);
 
-    // Renderers
+    /* renderers */
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(width, height);
     container.appendChild(this.renderer.domElement);
@@ -26,46 +27,53 @@ export class SceneManager {
     this.sharedTopRenderer.setSize(200, 200);
     this.sharedTopRenderer.setClearColor(0xffffff, 1);
 
-    // Controls
+    /* controls */
     this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.maxDistance = 200;
+    this.controls.maxDistance   = 200;
     this.controls.screenSpacePanning = false;
-    // initial mouseButtons and angles are set in setControls below
-    this.setControls({ rotate: true, pan: true });
+    this.setControls({ rotate: true, pan: true });    // helper below
 
-    // Raycaster & interaction
+    /* interaction utilities */
     this.raycaster = new THREE.Raycaster();
-    this.mouse = new THREE.Vector2();
+    this.mouse     = new THREE.Vector2();
 
-    // Storage
-    this.macs = [];
-
-    // Events & loop
+    /* listeners + loop */
     this.setupEventListeners();
     this.animate();
   }
 
-  /** 
-   * Apply rotate/pan mode and angle limits in one place. 
-   * @param {{rotate:boolean, pan:boolean, azimuth?:[number,number], polar?:[number,number]}} opts 
+  /* ─────────────────────────────── public helpers  ──────────────── */
+
+  /** Remove *everything* that is currently attached to the scene graph. */
+  clearScene() {                                    
+    while (this.scene.children.length) {
+      this.scene.remove(this.scene.children[0]);
+    }
+  }
+
+  /**
+   * Adjust OrbitControls’ behaviour in a single place.
+   * @param {Object} opts
+   *        rotate  (Boolean) – enable mouse rotation  
+   *        pan     (Boolean) – enable mouse panning  
+   *        azimuth ([min,max]) – radians; left/right clamp  
+   *        polar   ([min,max]) – radians; up/down clamp
    */
   setControls({
-    rotate = true,
-    pan    = true,
+    rotate  = true,
+    pan     = true,
     azimuth = [-Infinity, Infinity],
     polar   = [0, Math.PI]
   } = {}) {
     this.controls.enableRotate = rotate;
     this.controls.enablePan    = pan;
-
     this.controls.mouseButtons = {
       LEFT:   rotate ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN,
       MIDDLE: THREE.MOUSE.DOLLY,
       RIGHT:  THREE.MOUSE.PAN
     };
-
     this.controls.minAzimuthAngle = azimuth[0];
     this.controls.maxAzimuthAngle = azimuth[1];
     this.controls.minPolarAngle   = polar[0];
@@ -75,18 +83,15 @@ export class SceneManager {
   setupEventListeners() {
     window.addEventListener('resize', () => this.onWindowResize(), false);
 
-    // click interactions
-    this.renderer.domElement.addEventListener('click', (event) => {
-      eventBus.notify('sceneClicked', event);
-    });
-
-    // (camera button wiring removed; now lives in app.js)
+    // forward clicks to whoever cares (UIManager, etc.)
+    this.renderer.domElement.addEventListener('click', evt =>
+      eventBus.notify('sceneClicked', evt));
   }
 
   onWindowResize() {
-    const container = document.getElementById('threejs-container');
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+    const container   = document.getElementById('threejs-container');
+    const width       = container.clientWidth;
+    const height      = container.clientHeight;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
@@ -98,29 +103,7 @@ export class SceneManager {
     this.renderer.render(this.scene, this.camera);
   }
 
-  add(obj)    { this.scene.add(obj); }
+  /* re‑exports so callers don’t touch raw THREE.Scene methods */
+  add(obj)    { this.scene.add(obj);    }
   remove(obj) { this.scene.remove(obj); }
-
-  startRotateLeft() {
-    if (!this.rotateInterval) {
-      this.rotateInterval = setInterval(() => {
-        this.controls.rotateLeft(0.02);
-        this.controls.update();
-      }, 16);
-    }
-  }
-
-  startRotateRight() {
-    if (!this.rotateInterval) {
-      this.rotateInterval = setInterval(() => {
-        this.controls.rotateLeft(-0.02);
-        this.controls.update();
-      }, 16);
-    }
-  }
-
-  stopRotate() {
-    clearInterval(this.rotateInterval);
-    this.rotateInterval = null;
-  }
 }

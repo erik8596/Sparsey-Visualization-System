@@ -3,7 +3,9 @@ import { eventBus } from './app.js';
 import { MacVisualFactory } from './factories/MacVisualFactory.js';
 import { CmVisualFactory } from './factories/CmVisualFactory.js';
 import { NeuronVisualFactory } from './factories/NeuronVisualFactory.js';
+import { ReceptiveFieldVisualFactory } from './factories/ReceptiveFieldVisualFactory.js';
 
+// UIManager: manages the UI elements and their interactions
 export class UIManager {
   constructor(sceneManager) {
     this.sceneManager = sceneManager;
@@ -28,6 +30,7 @@ export class UIManager {
     this.inputGridGroup = null;
     this.layerSpacing = 10;
 
+    // Maps to track MACs, CMs, and neurons by layer
     this.clickableMACs = [];
     this.selectedMACs = [];
     this.macProbs = {}; 
@@ -36,11 +39,13 @@ export class UIManager {
     this.allNeurons = [];
     this._neuronConnections = [];
     this._connectionRefCounts = new Map(); // Key: connection object, Value: reference count
+    this.rfGroup   = null;
 
     // Instantiate the visual factories.
     this.macFactory    = new MacVisualFactory();
     this.cmFactory     = new CmVisualFactory();
     this.neuronFactory = new NeuronVisualFactory();
+    this.rfFactory     = new ReceptiveFieldVisualFactory(this.scene);
 
     // Subscribe to events.
     eventBus.subscribe('sceneClicked', (event) => this.onSceneClick(event));
@@ -50,13 +55,7 @@ export class UIManager {
     this.initializeFullModelControls();
   }
 
-  // ── NEW ── Remove-and-reset logic pulled into helpers ──────────────
-  clearScene() {
-    while (this.scene.children.length > 0) {
-      this.scene.remove(this.scene.children[0]);
-    }
-  }
-
+  // resets the state of the UIManager
   resetState() {
     this.clickableMACs            = [];
     this.selectedMACs             = [];
@@ -70,9 +69,10 @@ export class UIManager {
     this.neuronMap                = {};
   }
   
+  // Builds the scene from the given layers.
   buildFromLayers(layers, inputDims = null, inputActivations = null) {
     // 1) Clear out the old scene
-    this.clearScene();
+    this.sceneManager.clearScene();
   
     // 2) Reset all our tracking arrays/maps
     this.resetState();
@@ -189,7 +189,8 @@ export class UIManager {
           layerKey,
           macIndex:       macNumber,
           layerIndex:     layerIdx,
-          globalMacIndex: el.globalMacIndex
+          globalMacIndex: el.globalMacIndex,
+          rfRadius: el.receptive_field_radius ?? 0 
         });
 
         // ensure group exists
@@ -342,7 +343,7 @@ export class UIManager {
   }
 
   /**
-   * Creates the input grid.
+   * Creates the input grid of hexagonal cells.
    */
   createInputGrid(cols, rows, activations = {}) {
     this.inputGridMap   = {};               // ← NEW: map pixelIndex → cell group
@@ -351,7 +352,8 @@ export class UIManager {
     const hexSize = 2.0;
     const macSpacing = 3.0;
     const zOffset = 0;
-  
+    
+    // for each cell, create a hexagon shape
     for (let rowIdx = 0; rowIdx < rows; rowIdx++) {
       for (let colIdx = 0; colIdx < cols; colIdx++) {
         const x = colIdx * macSpacing;
@@ -378,7 +380,7 @@ export class UIManager {
         const cellGroup = new THREE.Group();
         cellGroup.add(fillMesh);
         cellGroup.add(outlineMesh);
-        // ← NEW:
+        // Set userData for easy access
         cellGroup.userData.type = 'input';
         cellGroup.position.set(
           x - ((cols - 1) * macSpacing) / 2,
@@ -411,41 +413,32 @@ export class UIManager {
     }
   }
 
+  /**
+   * Update the colors of the MAC activations based on the given activations.
+   * @param {*} macActs - Object containing MAC activations.
+   */
   updateMacActivations(macActs = {}) {
     // clickableMACs is your array of MAC groups
     this.clickableMACs.forEach(macGroup => {
-      // unpack exactly what you stored in buildFromLayers
+      // unpack exactly what is stored in buildFromLayers
       const { layerKey, macIndex, fillMesh, outlineLine } = macGroup.userData;
-    
-      // new, correct zero-based lookup:
+      // zero-based index lookup:
       const rawVal = macActs[layerKey]?.[macIndex - 1] ?? 0;
       const isActive = rawVal > 0;
-  
-      // 4) apply your usual coloring
-      fillMesh.material.color.set(
-        isActive
-          ? fillMesh.userData.activeFillColor
-          : fillMesh.userData.inactiveFillColor
-      );
-      outlineLine.material.color.set(
-        isActive
-          ? outlineLine.userData.activeOutlineColor
-          : outlineLine.userData.inactiveOutlineColor
-      );
+      // set fill color
+      fillMesh.material.color.set(isActive ? fillMesh.userData.activeFillColor : fillMesh.userData.inactiveFillColor);
+      // set outline color
+      outlineLine.material.color.set(isActive ? outlineLine.userData.activeOutlineColor : outlineLine.userData.inactiveOutlineColor);
     });
   }
 
   /**
-   * Creates either an arc (TubeGeometry) for same-layer or a line for cross-layer.
-   * Also colors them by direction:
-   *   - bottom-up (layerA < layerB) => blue
-   *   - top-down  (layerA > layerB) => magenta
-   *   - same layer => green
-   */
-    /**
-   * Creates either an arc (TubeGeometry) for same-layer
-   * or a straight Line for cross-layer, colored by direction.
-   */
+  * Creates either an arc (TubeGeometry) for same-layer or a line for cross-layer.
+  * Also colors them by direction:
+  *   - bottom-up (layerA < layerB) => blue
+  *   - top-down  (layerA > layerB) => magenta
+  *   - same layer => green
+  */
   createNeuronConnectionMesh(neuronA, neuronB, weight) {
     // 1) grab world positions
     const posA = new THREE.Vector3();
@@ -459,13 +452,9 @@ export class UIManager {
 
     // 3) pick color
     let color;
-    if (sameLayer) {
-      color = new THREE.Color(0x00ff00);       // green
-    } else if (dz > 0) {
-      color = new THREE.Color(0x0000ff);       // blue (bottom→up)
-    } else {
-      color = new THREE.Color(0xff00ff);       // magenta (top→down)
-    }
+    if (sameLayer) {color = new THREE.Color(0x00ff00);} // same layer (green)
+    else if (dz > 0) {color = new THREE.Color(0x0000ff);} //bot-up (blue)
+    else {color = new THREE.Color(0xff00ff);} //top-down (magenta)
 
     // 4) build mesh
     let mesh;
@@ -484,13 +473,10 @@ export class UIManager {
       const mat = new THREE.LineBasicMaterial({ color });
       mesh = new THREE.Line(geo, mat);
     }
-
     // 5) disable raycasting so it doesn’t intercept clicks
     mesh.raycast = () => {};
-
     return mesh;
   }
-
 
   /**
    * Recompute geometry for each neuron–neuron connection (arc or line)
@@ -500,6 +486,7 @@ export class UIManager {
     if (!this._neuronConnections) return;
     this._neuronConnections.forEach(conn => {
       const { neuronA, neuronB, mesh } = conn;
+      if (!mesh) return;
       const posA = new THREE.Vector3();
       const posB = new THREE.Vector3();
       neuronA.getWorldPosition(posA);
@@ -525,7 +512,6 @@ export class UIManager {
   }
 
   /**
-   * Single final source of truth:
    * Show connection if (global "Show All Weighted" is on) OR (refCount > 0).
    */
   refreshConnectionVisibility() {
@@ -536,6 +522,7 @@ export class UIManager {
     if (!this._neuronConnections) return;
 
     for (const conn of this._neuronConnections) {
+      if (!conn.mesh) continue;
       const refCount = this._connectionRefCounts.get(conn) || 0;
       // If global is on => always visible, else visible if refCount > 0
       conn.mesh.visible = globalShowAll || (refCount > 0);
@@ -552,9 +539,10 @@ export class UIManager {
     // 1) Clear any existing connections
     if (this._neuronConnections) {
       this._neuronConnections.forEach(conn => {
+        if (!conn.mesh) return;
         this.scene.remove(conn.mesh);
         conn.mesh.geometry.dispose();
-        if (conn.mesh.material) conn.mesh.material.dispose();
+        conn.mesh.material?.dispose?.();
       });
     }
     this._neuronConnections = [];
@@ -582,14 +570,14 @@ export class UIManager {
             const neuronNum = parseInt(neuronKey.split('_')[1], 10) + 1;
             const dest = this.neuronMap[layerKey]?.[macNum]?.[cmNum]?.[neuronNum];
             if (!dest) {
-              console.warn(` [Debug] Missing DEST for ${layerKey}.${macKey}.${cmKey}.${neuronKey}`, { layerKey, macNum, cmNum, neuronNum });
+              console.warn(`Missing DEST for ${layerKey}.${macKey}.${cmKey}.${neuronKey}`, { layerKey, macNum, cmNum, neuronNum });
               return;
             }
 
             // 4) For each source connection
             data.sources.forEach((src, idx) => {
               const w = src.weight;
-              if (!w) return;  // skip zero weights
+             
 
               // Find source object in the **previous** layer (or input grid)
               let sourceObj = null;
@@ -619,20 +607,25 @@ export class UIManager {
               }
 
               if (!sourceObj) {
-                console.warn(` [Debug] Missing SOURCE for srcCoords=${coords} → dest ${layerKey}.${macKey}.${cmKey}.${neuronKey}`);
+                console.warn(`Missing SOURCE for srcCoords=${coords} → dest ${layerKey}.${macKey}.${cmKey}.${neuronKey}`);
                 return;
               }
 
               // 5) Create the Three.js mesh (arc/line)
-              const mesh = this.createNeuronConnectionMesh(sourceObj, dest, w);
-              mesh.visible = false;
-              mesh.userData.isNeuronConnection = true;
-              this.scene.add(mesh);
+              let mesh = null;
+              /* Only instantiate a visible object when |w| > 0 ------------------- */
+              if (w !== 0) {
+                mesh = this.createNeuronConnectionMesh(sourceObj, dest, w);
+                mesh.visible = false;                        // default off
+                mesh.userData.isNeuronConnection = true;
+                this.scene.add(mesh);
+              }
 
               // 6) Track it for toggles & "Show All"
               const conn = { neuronA: sourceObj, neuronB: dest, mesh, weight: w };
               this._neuronConnections.push(conn);
-              this._connectionRefCounts.set(conn, 0);
+              /* ref‑count map only matters for ≥1 edges */
+              if (w !== 0) this._connectionRefCounts.set(conn, 0);
             });
           });
         });
@@ -654,6 +647,68 @@ export class UIManager {
   }
 
   /**
+   * Returns a *deduplicated* array of MAC/input objects that project to the
+   * neurons inside macGroup (bottom‑up component only).
+   */
+  computeReceptiveField(macGroup) {
+    const macNeurons = this.getNeuronsInMAC(macGroup);
+    const sources = new Set();
+
+    for (const conn of this._neuronConnections) {
+      if (!macNeurons.includes(conn.neuronB)) continue;  // keep only ↓ edges
+      const src = conn.neuronA;
+      if (!src || !src.userData) continue;
+
+      // We only want MAC groups or input cells, not individual neurons
+      if (src.userData.type === 'mac') {
+        sources.add( this.getMACGroup(src) );
+      } else if (src.userData.type === 'input') {
+        sources.add(src);
+      }
+    }
+    return [...sources];
+  }
+
+  /**
+   * For a *layer‑1* MAC, return *all* input‑grid cells whose centres fall
+   * within its anatomical receptive‑field radius, regardless of learned weight.
+   * For other layers we just return an empty array (handled elsewhere).
+   */
+  computeAnatomicalInputField(macGroup) {
+    if (macGroup.userData.layerIndex !== 1) return [];
+
+    const radius = macGroup.userData.rfRadius;
+    if (!radius) return [];
+
+    const centre = new THREE.Vector3();
+    macGroup.getWorldPosition(centre);
+
+    const hits = [];
+    Object.values(this.inputGridMap).forEach(cell => {
+      const pos = new THREE.Vector3();
+      cell.getWorldPosition(pos);
+
+      // XY distance (Sparsey radii are planar)
+      const dx = pos.x - centre.x;
+      const dy = pos.y - centre.y;
+      if ((dx * dx + dy * dy) <= radius * radius) hits.push(cell);
+    });
+    return hits;
+  }
+
+
+  /** Dispose of a THREE.Group we created for receptive‑fields. */
+  disposeGroup(group) {
+    if (!group) return;
+    group.traverse(o => {
+      o.geometry?.dispose?.();
+      o.material?.dispose?.();
+    });
+    this.scene.remove(group);
+  }
+
+
+  /**
    * Increment refCount for all connections belonging to neurons in this MAC.
    */
   incrementConnectionRefCountForMac(macGroup) {
@@ -670,6 +725,7 @@ export class UIManager {
 
   /**
    * Decrement refCount for all connections belonging to neurons in this MAC.
+   * @param {Object} macGroup - The MAC group to decrement the refCount for.
    */
   decrementConnectionRefCountForMac(macGroup) {
     const macNeurons = this.getNeuronsInMAC(macGroup);
@@ -685,13 +741,14 @@ export class UIManager {
   }
 
   /**
-   * @param {{[layerKey: string]: {[macKey: string]: {[cmKey: string]: number[]}}}} macProbs
+   * Update the MAC probabilities for each layer.
+   * @param {Object} macProbs - The MAC probabilities for each layer.
    */
   updateMacProbabilities(macProbs) {
     this.macProbs = macProbs;
 
     this.selectedMACs.forEach(macGroup => {
-      const { layerKey, macIndex } = macGroup.userData;                // macIndex is 1-based
+      const { layerKey, macIndex } = macGroup.userData;             // macIndex is 1-based
       const cmMap = macProbs[layerKey]?.[`mac_${macIndex}`] || {};
       const container = macGroup.userData.cmChartsContainer;
 
@@ -707,7 +764,6 @@ export class UIManager {
       // 3) one mini‐chart per CM
       Object.entries(cmMap).forEach(([cmKey, neuronProbs]) => {
         const cmNum = parseInt(cmKey.split('_')[1], 10);
-
         const cmDiv = document.createElement('div');
         cmDiv.classList.add('cm-chart-container');
 
@@ -746,7 +802,6 @@ export class UIManager {
           ctx.textAlign = 'center';
           ctx.fillText(i + 1, x + barW / 2, c.height - 2);
         });
-
         container.appendChild(cmDiv);
       });
     });
@@ -754,13 +809,12 @@ export class UIManager {
 
   /**
    * Dynamically updates the “Individual Layer Controls” container.
-   * (identical logic, slimmer code)
    */
   updateUniformScaleSliders() {
     const scaleContainer = document.getElementById('uniform-layer-scales');
     if (!scaleContainer) return;
 
-    // ── Helpers ──────────────────────────────────────────────────────────
+    // ── Helpers 
     const $ = (tag, props = {}, ...kids) => {
       const el = document.createElement(tag);
       Object.assign(el, props);
@@ -833,14 +887,11 @@ export class UIManager {
               });
             }
           });
-
           toggleRow.append(lbl, box);
         });
-
         layerBox.appendChild(toggleRow);
       }
-
-      // Divider + controls into the container
+      // Add divider + controls into the container
       scaleContainer.append($('hr', { className: 'slider-divider' }), layerBox);
     });
   }
@@ -848,21 +899,19 @@ export class UIManager {
   /**
    * Wires up the static “Full Model Controls”.
    * ────────────────────────────────────────────────────────────────────────────
-   *  • Layer‑spacing slider  → updates inter‑layer distance in real time
-   *  • “Reset Spacing”       → spacing ⇢ default
-   *  • “RESET ALL”           → full visual reset (spacing, scales, visibility,
+   *  Layer‑spacing slider  → updates inter‑layer distance in real time
+   *  “Reset Spacing”       → spacing ⇢ default
+   *  “RESET ALL”           → full visual reset (spacing, scales, visibility,
    *                            clickable‑MAC list, UI widgets, weighted‑edge flag)
-   *  • Weighted‑connections  → toggles visibility rule only
+   *  Weighted‑connections  → toggles visibility rule only
    */
   initializeFullModelControls() {
     const $id = (id) => document.getElementById(id);
-
     const spacingSlider = $id('layerSpacingSlider');
     const resetSpacing  = $id('resetSpacingBtn');
     const resetModel    = $id('resetModelBtn');
     const weightedChk   = $id('weightedConnectionsCheckbox');
     const uniformUI     = $id('uniform-layer-scales');
-
     const DEFAULT_SPACING = 10;
     const DEFAULT_SCALE   = 1;
 
@@ -933,15 +982,16 @@ export class UIManager {
       const layerIndex = this.zToIndexMap[key];
       this.layerGroups[key].position.z = this.layerSpacing * layerIndex;
     }
-
     // Recompute arcs/lines
     this.updateWeightedConnections();
     // Then apply final visibility logic
     this.refreshConnectionVisibility();
   }
 
-  // ---------- MAC Click Handling -----------------
-
+  /**
+   * Function to handle mouse click events on the scene.
+   * @param {*} event - The mouse event.
+   */
   onSceneClick(event) {
     const rect = this.sceneManager.renderer.domElement.getBoundingClientRect();
     this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -959,6 +1009,11 @@ export class UIManager {
     }
   }
   
+  /**
+   * Helper function to find the MAC group in the hierarchy.
+   * @param {*} object - The object to check.
+   * @returns – The MAC group object if found, otherwise null.
+   */
   getMACGroup(object) {
     while (object) {
       if (this.clickableMACs.includes(object) && object.userData && object.userData.type === 'mac') {
@@ -972,7 +1027,6 @@ export class UIManager {
   /* ───────────────────────── toggleMACSelection ───────────────────────── */
   toggleMACSelection(macGroup) {
     const outline = macGroup.userData.outlineLine;
-
     // Cache the true outline colour once
     if (!outline.userData.originalOutlineColor) {
       outline.userData.originalOutlineColor = outline.material.color.clone();
@@ -982,12 +1036,13 @@ export class UIManager {
     const deselect = () => {
       macGroup.userData.innerOutline && macGroup.remove(macGroup.userData.innerOutline);
       macGroup.userData.innerOutline = null;
-
       macGroup.userData.canvasSection?.remove();
       macGroup.userData.canvasSection = macGroup.userData.canvasWrapper = null;
-
       outline.material.color.copy(outline.userData.originalOutlineColor);
 
+
+      this.disposeGroup(macGroup.userData.rfGroup);
+      macGroup.userData.rfGroup = null;
       macGroup.userData.isSelected = false;
       this.decrementConnectionRefCountForMac(macGroup);
       this.refreshConnectionVisibility();
@@ -1012,9 +1067,18 @@ export class UIManager {
 
       macGroup.userData.isSelected = true;
       this.selectedMACs.push(macGroup);
-
+      // Update MAC probabilities, increment connection ref‑count, and refresh visibility
       this.updateMacProbabilities(this.macProbs);
       this.incrementConnectionRefCountForMac(macGroup);
+      /* complete receptive field ------------------------------------------------ */
+      const learnedRF = this.computeReceptiveField(macGroup);         // existing
+      const fullRF    = this.computeAnatomicalInputField(macGroup);   // NEW
+      const rfObjs    = [...new Set([...learnedRF, ...fullRF])];      // union + dedupe
+
+      if (rfObjs.length) {
+        const grp = this.rfFactory.build(rfObjs);
+        macGroup.userData.rfGroup = grp;
+      }
       this.refreshConnectionVisibility();
     };
 
@@ -1025,7 +1089,9 @@ export class UIManager {
     details && (details.innerHTML = `<p><strong>Layer:</strong> ${macGroup.userData.layerIndex}</p>`);
   }
 
-  /* ───────────────────────── resetToggledMACs ─────────────────────────── */
+  /**
+   * Resets the toggled MACs by deselecting them and clearing the side panel.
+   */
   resetToggledMACs() {
     // Deselect every currently selected MAC
     this.selectedMACs.forEach(m => {
@@ -1040,6 +1106,11 @@ export class UIManager {
         line.material.color.copy(line.userData.originalOutlineColor);
     });
 
+    this.selectedMACs.forEach(mac => {
+      this.disposeGroup(mac.userData.rfGroup);
+      mac.userData.rfGroup = null;
+    });
+
     // Clear arrays + UI
     this.selectedMACs = [];
     const details = document.getElementById('mac-details');
@@ -1049,63 +1120,63 @@ export class UIManager {
     // Reset canvases & connection ref‑counts
     this.clickableMACs.forEach(m => { m.userData.canvasWrapper = null; });
     this._neuronConnections.forEach(conn => this._connectionRefCounts.set(conn, 0));
-
+    // Refresh the connections
     this.refreshConnectionVisibility();
   }
 
-  
-
-  /* ───────────────────── createMACCanvas ───────────────────── */
+  /**
+   * Function to create a canvas for the MAC group.
+   * @param {*} macGroup - The MAC group to create the canvas for.
+   * @returns - The created canvas wrapper element.
+   */
   createMACCanvas(macGroup) {
     const $ = (tag, cls = '') => Object.assign(document.createElement(tag), { className: cls });
-
     /* container + heading */
     const wrap  = $('div', 'mac-canvas-wrapper');
     const label = $('p',   'mac-canvas-label');
     label.textContent = `MAC ${macGroup.userData.macIndex} (Layer ${macGroup.userData.layerIndex})`;
     wrap.append(label);
-
     /* top‑view canvas + placeholder chart box */
     const topCanvas = $('canvas', 'mac-top-canvas');
     topCanvas.width = topCanvas.height = 150;
     const chartBox  = $('div', 'cm-charts-container');
     wrap.append(topCanvas, chartBox);
-
     /* side‑panel section (+ divider if needed) */
     const side   = document.getElementById('side-panel');
     const sect   = $('div', 'mac-section');
     if (side.children.length) sect.append($('hr', 'slider-divider'));
     sect.append(wrap);
     side.appendChild(sect);
-
     /* backlink bookkeeping */
     Object.assign(macGroup.userData, {
       canvasSection:     sect,
       canvasWrapper:     wrap,
       cmChartsContainer: chartBox
     });
-
     /* initial render */
     this.createTopView(macGroup, topCanvas);
     return wrap;
   }
 
-  /* ───────────────────── createTopView ─────────────────────── */
+  /**
+   * Main function to create the top view of a MAC group.
+   * @param {*} macGroup - The MAC group to create the top view for.
+   * @param {*} canvas - The canvas element to render the top view on.
+   * @returns - The created canvas element.
+   */
   createTopView(macGroup, canvas) {
     if (!this.sharedTopRenderer) {
       console.error('Shared top renderer not initialized');
       return;
     }
-
     /* scene + camera */
     const aspect = canvas.width / canvas.height,
           size   = 5,
           scene  = new THREE.Scene();
     scene.background = new THREE.Color(0xffffff);
 
-    const cam = new THREE.OrthographicCamera(
-      -size * aspect, size * aspect, size, -size, 0.1, 100
-    );
+    // set up orthographic camera
+    const cam = new THREE.OrthographicCamera(-size * aspect, size * aspect, size, -size, 0.1, 100);
     cam.position.z = 10; cam.lookAt(0, 0, 0);
 
     /* clone MAC, remove outline colour, scale a bit */
@@ -1141,6 +1212,9 @@ export class UIManager {
     }
   }
 
+  /**
+   * Helper function to reset the outline color of a group.
+   */
   resetOutlineColor(group) {
     group.traverse(child => {
       if (child.isLine && child.material && child.material.color &&
@@ -1150,6 +1224,10 @@ export class UIManager {
     });
   }
   
+  /**
+   * Helper function to flip image data vertically for rendering in right side panel.
+   * @param {*} imageData - The image data to flip.
+   */
   flipImageDataVertically(imageData) {
     const width = imageData.width;
     const height = imageData.height;
@@ -1165,6 +1243,9 @@ export class UIManager {
     }
   }
   
+  /**
+   * Clears the side panel by removing all child elements.
+   */
   clearSidePanel() {
     const sidePanel = document.getElementById("side-panel");
     while (sidePanel.firstChild) {
@@ -1180,46 +1261,11 @@ export class UIManager {
     }
   }
   
-  updateProjectDropdown(projects) {
-    if (!this.projectSelect) {
-      console.error('projectSelect element not found!');
-      return;
-    }
-    this.projectSelect.innerHTML = '<option value="" disabled selected>Select a project</option>';
-    projects.forEach(project => {
-      const option = document.createElement('option');
-      option.value = project;
-      option.textContent = project;
-      this.projectSelect.appendChild(option);
-    });
-    this.projectSelect.disabled = false;
-    this.runSelect.disabled = true;
-    this.visualizeButton.disabled = true;
-  }
-  
-  updateRunDropdown(project_runs) {
-    if (!this.runSelect) {
-      console.error('Run select element not found!');
-      return;
-    }
-    this.runSelect.innerHTML = '<option value="" disabled selected>Select a run</option>';
-    if (!Array.isArray(project_runs) || project_runs.length === 0) {
-      this.runSelect.innerHTML = '<option value="" disabled selected>No runs available</option>';
-      this.runSelect.disabled = true;
-      this.visualizeButton.disabled = true;
-      return;
-    }
-    project_runs.forEach(run => {
-      const option = document.createElement('option');
-      option.value = run.id;
-      option.textContent = run.name;
-      this.runSelect.appendChild(option);
-    });
-    this.runSelect.disabled = false;
-    this.visualizeButton.disabled = false;
-  }
-
-  
+  /**
+   * Helper function to draw a hexagon shape.
+   * @param {*} shape - The shape to draw the hexagon on.
+   * @param {*} size - The size of the hexagon.
+   */
   drawHexagon(shape, size) {
     for (let i = 0; i < 6; i++) {
       let angle = (Math.PI / 3) * i;
@@ -1236,19 +1282,7 @@ export class UIManager {
 
   /**
    * Recolor every neuron mesh: black if active (true) at this step, white otherwise.
-   *   neuronActs = {
-   *     layer_1: {
-   *       1: {            // macIndex
-   *         1: {          // cmIndex
-   *           1: false,  // neuronIndex → boolean/null
-   *           2: true
-   *         },
-   *         2: {  … }
-   *       },
-   *       2: {  … }
-   *     },
-   *     layer_2: { … }
-   *   }
+   * @param {Object} neuronActs - Object containing neuron activations.
    */
   updateNeuronActivations(neuronActs = {}) {
     this.allNeurons.forEach(neuron => {
