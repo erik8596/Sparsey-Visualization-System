@@ -19,17 +19,15 @@ class ActivationProbabilitiesParser:
 
     def _apply_softmax_to_cm(self, neuron_dict: Dict[str, float]) -> Dict[str, float]:
         """Applies softmax to the probabilities within a single CM's neuron dictionary."""
-        if not neuron_dict: # Handle empty CM dictionary
+        if not neuron_dict: 
             return {}
 
         neuron_keys = list(neuron_dict.keys())
         raw_probabilities_list = [neuron_dict[key] for key in neuron_keys]
         
-        # Check if list is empty (e.g., if all values failed float conversion earlier)
         if not raw_probabilities_list:
              return {}
 
-        # Using float16 as per previous edit
         raw_probabilities_tensor = torch.tensor(raw_probabilities_list, dtype=torch.float16)
 
         softmax_probabilities_tensor = torch.softmax(raw_probabilities_tensor, dim=0)
@@ -116,22 +114,6 @@ class ActivationProbabilitiesParser:
         Get activation probabilities for a specific step.
         """
         return self.parsed_probabilities[step]
-
-if __name__ == '__main__':
-    entity = 'sparsey-testing-system'
-    project = 'weights_testing'
-
-    wbf = WandBFacade()
-    wbf.load_projects()
-    print(wbf.update_project(project_name=project))
-    wbf.load_runs_from_project()
-    run_id = '81di3zhg'
-    print(wbf.project_runs)
-    wbf.update_run(run_id=run_id)
-
-    acp = ActivationProbabilitiesParser(wbf)
-    acp.parse()
-    pprint.pprint(acp.parsed_probabilities)
 
 
 

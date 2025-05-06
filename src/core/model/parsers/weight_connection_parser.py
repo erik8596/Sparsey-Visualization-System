@@ -350,7 +350,6 @@ class WeightedConnectionsParser:
         total_connections_parsed = 0
 
         for layer_key, layer_connection_data in step_data.items():
-            # --- Initial checks and data loading (similar to parse method) ---
             if not layer_key.startswith("layer_"): 
                 continue
             try: 
@@ -368,13 +367,11 @@ class WeightedConnectionsParser:
             if weights_tensor is None or connections_tensor is None: 
                 continue
 
-            # Convert to numpy
             if isinstance(weights_tensor, torch.Tensor):
                 weights_tensor = weights_tensor.cpu().numpy()
             if isinstance(connections_tensor, torch.Tensor): 
                 connections_tensor = connections_tensor.cpu().numpy()
 
-            # Handle case where loaded data might be a list
             if isinstance(weights_tensor, list):
                 try:
                     weights_tensor = np.array(weights_tensor)
@@ -390,7 +387,6 @@ class WeightedConnectionsParser:
                     print(f"Warning: Failed to convert connections_tensor list to numpy array for {layer_key}: {e}. Skipping layer.")
                     continue
 
-            # --- Dimension and Shape Validation (similar to parse method) ---
             try:
                 dest_dims = self._get_layer_dims(dest_layer_index)
                 prev_dims = self._get_layer_dims(prev_layer_index)
@@ -419,51 +415,33 @@ class WeightedConnectionsParser:
             if connections_tensor.shape != exp_conns_shape or weights_tensor.shape != exp_weights_shape:
                 print(f"Warning: Tensor shape mismatch for {layer_key}. Conns: {connections_tensor.shape} vs {exp_conns_shape}, Weights: {weights_tensor.shape} vs {exp_weights_shape}. Skipping.")
                 continue
-            # --- End Validation ---
 
             layer_connections_parsed = 0
             parsed_structure[layer_key] = {}
 
-            # --- Vectorized Processing ---
-            
-            # 1. Find indices of weights above threshold
-            #    indices is a tuple of arrays: (dest_mac_indices, src_neuron_rf_flat_indices, dest_neuron_in_mac_flat_indices)
             indices = np.where(np.abs(weights_tensor) > weight_threshold)
             
-            # Check if any weights met the threshold
             if len(indices[0]) == 0:
                 print(f"No connections found above threshold {weight_threshold} for {layer_key}.")
                 continue # Skip to next layer if no connections found
 
-            # Extract the index arrays
             dest_mac_idx_arr = indices[0]
             src_neuron_rf_flat_idx_arr = indices[1]
             dest_neuron_in_mac_flat_idx_arr = indices[2]
 
-            # 2. Get the corresponding weight values
             scalar_weights_arr = weights_tensor[indices]
 
-            # 3. Calculate receptive field MAC index (rf_mac_idx) from src_neuron_rf_flat_idx
-            #    Need prev_dims['neurons_per_mac'] - handle potential division by zero if dims were bad (should be caught earlier)
             prev_neurons_per_mac = prev_dims['neurons_per_mac']
             rf_mac_idx_arr = src_neuron_rf_flat_idx_arr // prev_neurons_per_mac
 
-            # 4. Lookup the actual source MAC flat index using connections_tensor
-            #    connections_tensor shape: (dest_num_macs, receptive_field_num_macs)
-            #    We need connections_tensor[dest_mac_idx_arr[i], rf_mac_idx_arr[i]] for each i
-            #    This uses advanced indexing in NumPy
             try:
                  src_mac_flat_idx_arr = connections_tensor[dest_mac_idx_arr, rf_mac_idx_arr]
             except IndexError as e:
                  print(f"Error during advanced indexing lookup in connections_tensor for {layer_key}: {e}. Max dest_mac={np.max(dest_mac_idx_arr)}, Max rf_mac={np.max(rf_mac_idx_arr)}, Shape={connections_tensor.shape}. Skipping layer.")
                  continue
 
-
-            # 5. Calculate source neuron flat index within its MAC
             src_neuron_in_mac_flat_idx_arr = src_neuron_rf_flat_idx_arr % prev_neurons_per_mac
 
-            # --- Structure the Output ---
-            # Now iterate through the found connections (which is much smaller than iterating all possibilities)
             for i in range(len(dest_mac_idx_arr)):
                 dest_mac_idx = dest_mac_idx_arr[i]
                 dest_neuron_in_mac_flat_idx = dest_neuron_in_mac_flat_idx_arr[i]
@@ -471,19 +449,16 @@ class WeightedConnectionsParser:
                 src_neuron_in_mac_flat_idx = src_neuron_in_mac_flat_idx_arr[i]
                 scalar_weight = scalar_weights_arr[i]
 
-                # Skip invalid source MAC indices derived from connections_tensor
                 if src_mac_flat_idx < 0: 
                     continue
                 if src_mac_flat_idx >= prev_dims["num_macs"]: 
                     continue # Bounds check
 
-                # Calculate destination coordinates
                 try:
                     dest_cm, dest_neuron = self._get_cm_neuron_coords_in_mac(dest_neuron_in_mac_flat_idx, dest_layer_index)
                 except (ValueError, IndexError): 
                     continue # Skip if error
 
-                # Calculate source coordinates
                 try:
                     if prev_layer_index == 0:
                         source_coords = (src_mac_flat_idx,)
@@ -493,7 +468,6 @@ class WeightedConnectionsParser:
                 except (ValueError, IndexError): 
                     continue # Skip if error
 
-                # Add to nested structure
                 mac_key = f"mac_{dest_mac_idx}"
                 cm_key = f"cm_{dest_cm}"
                 neuron_key = f"neuron_{dest_neuron}"
@@ -510,7 +484,6 @@ class WeightedConnectionsParser:
                     "weight": float(scalar_weight)
                 })
                 layer_connections_parsed += 1
-            # --- End Structuring Output ---
 
             print(f"Parsed {layer_connections_parsed} connections for {layer_key} at step {step} (threshold > {weight_threshold}).")
             total_connections_parsed += layer_connections_parsed

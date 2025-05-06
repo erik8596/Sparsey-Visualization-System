@@ -23,17 +23,12 @@ class ModelConfig:
         try:
             config = getattr(run, "config", {})
             if isinstance(config, str):
-                # Handle case where config is a string
                 import json
                 config = json.loads(config)
 
             model_config = config.get("model", {}).get("layers", {})
             if not model_config:
                 raise ValueError(f"No layers found in WandB run {run.id}")
-
-            # print("\n=== Raw Model Config ===")
-            # print(model_config)
-            # print("===================================\n")
 
             return model_config
 

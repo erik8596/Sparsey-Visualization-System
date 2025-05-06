@@ -143,14 +143,9 @@ class WandBFacade:
             loaded_runs_info = []
             workers = max_workers if max_workers and max_workers > 0 else None
             
-            # Use ThreadPoolExecutor to extract run info in parallel
-            # Note: The primary benefit here might be limited if the bottleneck is the initial API call to list runs, 
-            # but this structure allows for potentially more complex per-run processing later if needed.
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                # Submit tasks for each run object
                 future_to_run = {executor.submit(self._extract_run_info, run): run for run in all_runs}
 
-                # Collect results as they complete
                 for future in concurrent.futures.as_completed(future_to_run):
                     run_info = future.result()
                     if run_info: # Add to list only if info extraction was successful
@@ -161,7 +156,6 @@ class WandBFacade:
                 self.project_runs = []
                 return []
 
-            # Sort by name for consistent comparison (optional, but good practice)
             loaded_runs_info.sort(key=lambda x: x.get('name', ''))
             
             # check if cached runs match loaded runs (after sorting both for consistency)
@@ -169,10 +163,10 @@ class WandBFacade:
             
             if cached_runs_sorted == loaded_runs_info:
                 print("Using cached project runs list.")
-                return self.project_runs # Return original (unsorted) cache
+                return self.project_runs 
             else:
                 print(f"Successfully loaded info for {len(loaded_runs_info)} project runs.")
-                self.project_runs = loaded_runs_info # Update cache with the new (sorted) list
+                self.project_runs = loaded_runs_info 
                 return loaded_runs_info
                 
         except Exception as e:
@@ -284,7 +278,7 @@ class WandBFacade:
     
     def get_processed_model_config(self, run_id: str = None, project_name: str = None, entity_name: str = None) -> Optional[ModelConfig]:
         """Fetch processed model configuration and input dimensions."""
-        # Get run object, using cached run if possible
+        # get run object, using cached run if possible
         run = self.run if (run_id == self.run_id) else self.fetch_run(
             run_id or self.run_id,
             project_name or self.project_name,
@@ -292,11 +286,9 @@ class WandBFacade:
         )
         
         try:
-            # Get the new model config instance
             processed_config = self.mconf.get_model_config(run)
-            # Update the facade's internal mconf instance
             self.mconf = processed_config
-            return processed_config # Return the updated config
+            return processed_config
         except ValueError as e:
             print(f"Error loading model config in facade: {e}")
             return None
@@ -330,9 +322,8 @@ class WandBFacade:
                                   download_dir_root: str
                                   ) -> Tuple[Optional[int], Optional[Any]]:
         """Processes a single artifact version: checks cache, downloads, loads .pt file."""
-        version_index = None # Initialize in case of early return or error before assignment
+        version_index = None
         try:
-            # Extract version index from the name, e.g., 'run_id-weights:v12' -> 12
             version_str = artifact.name.split(':')[-1]
             if not version_str.startswith('v'):
                 print(f"Skipping artifact (unexpected version format): {artifact.name}")
@@ -343,11 +334,8 @@ class WandBFacade:
             artifact_full_name = f"{entity}/{proj}/{artifact.name}"
             version_download_dir = os.path.join(download_dir_root, f"v{version_index}")
             
-            # --- Caching Check --- 
             pt_file_path = None
-            # Check if version directory exists first
             if os.path.isdir(version_download_dir):
-                # Look for existing .pt file
                 for filename in os.listdir(version_download_dir):
                     if filename.endswith('.pt'):
                         pt_file_path = os.path.join(version_download_dir, filename)
@@ -360,16 +348,12 @@ class WandBFacade:
                             pt_file_path = None # Reset path to trigger download
                         break # Found a .pt file, stop searching this dir
 
-            # --- Download if not cached or cache loading failed --- 
             print(f"Processing artifact (cache miss or error): {artifact_full_name}")
             os.makedirs(version_download_dir, exist_ok=True)
 
-            # Fetch and download the specific artifact version
-            # Use self.api() which should be thread-safe for read operations generally
             artifact = self.api().artifact(name=artifact_full_name, type='weighted_connections') 
             artifact.download(root=version_download_dir)
 
-            # Find the .pt file within the specific version's directory (after download)
             pt_file = None
             for filename in os.listdir(version_download_dir):
                 if filename.endswith('.pt'):
@@ -377,7 +361,6 @@ class WandBFacade:
                     print(f"  Found .pt file after download: {filename}")
                     break
             
-            # Load the data if found
             if pt_file:
                 artifact_data = torch_load(pt_file)
                 print(f"  Successfully loaded and stored data for index {version_index}")
@@ -417,7 +400,7 @@ class WandBFacade:
         ]
         print(f"Found {len(artifacts_to_process)} artifacts matching the '-weights:v' convention.")
 
-        # using ThreadPoolExecutor for parallel processing
+        # using threadpoolexecutor for parallel processing
         results = {}
         # determine max_workers, default to None (python default) if not provided
         workers = max_workers if max_workers and max_workers > 0 else None 
@@ -458,10 +441,9 @@ class WandBFacade:
         
         version_dir = os.path.join(DATA_ARTIFACT_STORE_PATH, 'weighted_connections', self.run_id, f"v{step}")
         
-        # Need the specific artifact filename pattern. Assuming it matches the artifact name.
-        # Artifact name format: {run_id}-weights:v{step}
-        # Expected .pt file name might just be something generic like model.pt or specific.
-        # Let's assume we need to look for *any* .pt file in the version_dir for now.
+        # need the specific artifact filename pattern. Assuming it matches the artifact name.
+        # artifact name format: {run_id}-weights:v{step}
+        # expected .pt file name might just be something generic like model.pt or specific.
         if os.path.isdir(version_dir):
             try:
                 for filename in os.listdir(version_dir):
@@ -470,7 +452,7 @@ class WandBFacade:
             except OSError as e:
                 print(f"Error accessing cache directory {version_dir}: {e}")
                 return None
-        return None # Directory or file not found
+        return None
 
     def _load_artifact_from_cache(self, step: int) -> Optional[Dict[str, Any]]:
         """Loads artifact data for a step from the local file cache."""
@@ -479,7 +461,6 @@ class WandBFacade:
             print(f"Cache hit for step {step}: Found {pt_file_path}. Loading...")
             try:
                 artifact_data = torch_load(pt_file_path)
-                # Store in memory cache
                 if not self.mconf: self.mconf = ModelConfig() # Ensure mconf exists
                 if not hasattr(self.mconf, 'weighted_connections'): self.mconf.weighted_connections = {}
                 self.mconf.weighted_connections[step] = artifact_data
@@ -487,7 +468,6 @@ class WandBFacade:
                 return artifact_data
             except Exception as e:
                 print(f"Error loading cached file {pt_file_path} for step {step}: {e}. Will attempt W&B fetch.")
-                # Consider removing the corrupted cache file here?
         return None
 
     def _fetch_and_load_specific_artifact(self, step: int) -> Optional[Dict[str, Any]]:
@@ -497,7 +477,6 @@ class WandBFacade:
             return None
             
         try:
-            # Construct artifact details
             artifact_version_name = f"{self.run_id}-weights:v{step}"
             artifact_full_wandb_path = f"{self.entity}/{self.project_name}/{artifact_version_name}"
             version_download_dir = os.path.join(DATA_ARTIFACT_STORE_PATH, 'weighted_connections', self.run_id, f"v{step}")
@@ -505,13 +484,10 @@ class WandBFacade:
 
             print(f"Cache miss for step {step}. Fetching artifact: {artifact_full_wandb_path}...")
             
-            # Fetch and download the specific artifact version
-            # Use self.api() which should be thread-safe for read operations generally
             artifact = self.api().artifact(name=artifact_full_wandb_path, type='weighted_connections') 
             download_result_path = artifact.download(root=version_download_dir)
             print(f"Artifact for step {step} downloaded to: {download_result_path}")
 
-            # Find the .pt file within the specific version's directory (after download)
             pt_file = None
             for filename in os.listdir(version_download_dir):
                 if filename.endswith('.pt'):
@@ -519,12 +495,12 @@ class WandBFacade:
                     print(f"  Found .pt file after download: {filename}")
                     break
             
-            # Load the data if found
             if pt_file:
                 artifact_data = torch_load(pt_file)
-                 # Store in memory cache
-                if not self.mconf: self.mconf = ModelConfig() # Ensure mconf exists
-                if not hasattr(self.mconf, 'weighted_connections'): self.mconf.weighted_connections = {}
+                if not self.mconf: 
+                    self.mconf = ModelConfig() # Ensure mconf exists
+                if not hasattr(self.mconf, 'weighted_connections'): 
+                    self.mconf.weighted_connections = {}
                 self.mconf.weighted_connections[step] = artifact_data
                 print(f"Successfully loaded and cached data for step {step} from W&B.")
                 return artifact_data
@@ -533,7 +509,6 @@ class WandBFacade:
                 return None
         
         except wandb.errors.CommError as ce:
-            # Specific handling for artifact not found or other API errors
             if "Could not find artifact" in str(ce) or "Not Found" in str(ce):
                  print(f"Artifact for step {step} ({artifact_full_wandb_path}) not found on W&B.")
             else:
@@ -541,7 +516,6 @@ class WandBFacade:
             return None
         except Exception as e:
             print(f"Unexpected error fetching/loading artifact for step {step}: {e}")
-            # Potentially call self._handle_api_error(f"artifact fetching step {step}", e)
             return None
 
     def get_weighted_connections_for_step(self, step: int) -> Optional[Dict[str, Any]]:
@@ -557,17 +531,14 @@ class WandBFacade:
         Returns:
             Optional[Dict[str, Any]]: Connection data for the step, or None if unavailable.
         """
-        # 1. Check memory cache
         if self.mconf and hasattr(self.mconf, 'weighted_connections') and step in self.mconf.weighted_connections:
             print(f"Memory cache hit for step {step}.")
             return self.mconf.weighted_connections[step]
 
-        # 2. Check file cache
         cached_data = self._load_artifact_from_cache(step)
         if cached_data is not None:
             return cached_data
             
-        # 3. Fetch from W&B (will also load and cache in memory if successful)
         return self._fetch_and_load_specific_artifact(step)
         
         
