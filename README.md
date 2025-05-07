@@ -147,11 +147,7 @@ flask run
 
 ### Deployers (Production)
 
-```bash
-gunicorn app:app --bind 0.0.0.0:5000
-```
-
-Set required environment variables (e.g., `WANDB_API_KEY`) prior to deployment.
+Set required environment variables (e.g., `WANDB_API_KEY`, `FLASK_PORT`) prior to deployment.
 
 ### End Users
 
@@ -176,4 +172,4 @@ sparseypy_visualizer/
 
 ## 🤝 License
 
-This project is under development and privately maintained. Licensing details will be made available upon project release.
+This project is under development and privately maintained. Licensing details may be made available.
