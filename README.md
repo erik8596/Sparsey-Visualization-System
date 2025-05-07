@@ -41,6 +41,7 @@ We recommend the following during development:
 
 - **Jupyter Notebooks**: For prototyping visualizations, metrics exploration, and experimenting with different data pipelines.
 - **Flask**: For serving the backend and handling run selection, parsing, and visualization requests.
+- **Three.js**: For rendering 3D components of Sparsey Models.
 
 ---
 
