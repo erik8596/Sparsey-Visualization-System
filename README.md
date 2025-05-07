@@ -1,28 +1,178 @@
-# The Sparsey Visualization System (SVS)
 
-A Python 3.12 + Three.js web application that visualises the lifelong‑learning
-mechanisms of **Sparsey**.  
-This README walks a new team from zero to a running system, shows how to run the
-automated test suites, and explains exactly how to bundle your deliverables
-(.zip, video clips, reports, slides, poster).
+# Sparsey Visualization System (SVS)
 
------------------------------------------------------------------------------------
+The **Sparsey Visualization System (SVS)** is an interactive, extensible tool for exploring Sparsey's cognitive memory models. It offers a powerful visualization interface for inspecting sparse distributed representations (SDRs) and hierarchical memory structures. This project integrates backend logic written in Python with a web-based frontend to support inspection, debugging, and model interpretation.
 
-## 1 . Quick‑Start (5 shell commands)
+SVS is designed with modularity and best practices in mind, extending the principles of the *Zen of Python* through the use of proven architectural patterns across both backend and frontend.
 
-- `git clone https://github.com/dhruvshr/sparseypy_visualizer.git  SVS`
-- `cd SVS`
-- `python -m venv venv                    # create venv`
-- `source venv/bin/activate               # if Windows: .\venv\Scripts\Activate.ps1`
-- `pip install -r requirements.txt        # install the requirements for launching SVS`
-- `python main.py                         # launches Flask on http://127.0.0.1:5000`
+---
 
+## 🚀 Getting Started
 
+### 1. Clone the Repository
 
-## 2 . Navigate to localhost http://127.0.0.1:5000 (or whichever server configured in .env file) in your browser
+```bash
+git clone https://github.com/dhruvshr/sparseypy_visualizer.git
+cd sparseypy_visualizer
+```
 
+### 2. Set Up a Virtual Environment
 
+```bash
+python3 -m venv .venv
+# Activate:
+# macOS/Linux:
+source .venv/bin/activate
+# Windows:
+.\venv\Scripts\Activate.ps1
+```
 
-## 3 . An empty dashboard with two drop‑downs (“Project” + “Run”) will appear.
-Select a W&B project/run and press the 'Visualize' button to render the Sparsey
-model for that run.
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## 🧪 Development Tools
+
+We recommend the following during development:
+
+- **Jupyter Notebooks**: For prototyping visualizations, metrics exploration, and experimenting with different data pipelines.
+- **Flask**: For serving the backend and handling run selection, parsing, and visualization requests.
+
+---
+
+## 🔧 System Requirements
+
+### Hardware
+- **CPU**: 4+ cores with hyperthreading
+- **RAM**: Minimum 8 GB (16 GB recommended)
+- **Storage**: 5 GB+ of free SSD space
+- **GPU**: Optional; integrated graphics sufficient
+
+### OS Support
+- macOS ✅ (preferred)
+- Linux ✅ (recommended for ML workflows)
+- Windows ✅ (via native Python or WSL)
+
+### Python Version
+- Python 3.11 or higher required
+
+To check your version:
+```bash
+python3 --version  # macOS/Linux
+python --version   # Windows
+```
+
+---
+
+## 📦 Key Dependencies
+
+- **Visualization**: Three.js (frontend)
+- **Backend**: Flask, wandb, numpy, pandas
+- **Environment Management**: virtualenv, pipenv (optional)
+
+Refer to `requirements.txt` for the full list of dependencies.
+
+---
+
+## 🛠️ Running the Application
+
+### 1. Start Flask Server
+
+```bash
+python main.py
+```
+
+You’ll see output similar to:
+
+```
+Serving Flask app 'src.web.app'
+Running on http://127.0.0.1:5000
+```
+
+### 2. Open in Browser
+
+Visit:
+
+```
+http://127.0.0.1:5000/
+```
+
+You should see the SVS GUI. If the GUI does not load, ensure your server is active and no port conflicts exist.
+
+---
+
+## 👥 Contributing
+
+### Branching & Version Control
+
+```bash
+git checkout -b <your-feature-branch>
+# After changes
+git add .
+git commit -m "Your commit message"
+git push origin <your-feature-branch>
+```
+
+Submit a Pull Request (PR) via GitHub for code review and integration.
+
+### Testing
+
+Test your features thoroughly. Use or expand unit tests where applicable. You may use:
+
+```bash
+pytest
+```
+
+---
+
+## ⚙️ Role-Specific Launch Modes
+
+### Developers
+
+```bash
+# macOS/Linux
+export FLASK_ENV=development
+export FLASK_APP=app.py
+flask run
+
+# Windows PowerShell
+$env:FLASK_ENV="development"
+flask run
+```
+
+### Deployers (Production)
+
+```bash
+gunicorn app:app --bind 0.0.0.0:5000
+```
+
+Set required environment variables (e.g., `WANDB_API_KEY`) prior to deployment.
+
+### End Users
+
+Download ZIP from GitHub, extract, and follow steps from **System Installation** (Sections 2–5 above). No Git or server knowledge is required to run the application locally.
+
+---
+
+## 📁 Directory Structure
+
+```
+sparseypy_visualizer/
+│
+├── main.py                 # Entry point for Flask backend
+├── requirements.txt        # Python dependencies
+├── src/
+│   ├── core/               # Model and data logic
+│   └── web/                # Flask views and routes
+└── notebooks/              # Jupyter dev and test notebooks
+```
+
+---
+
+## 🤝 License
+
+This project is under development and privately maintained. Licensing details will be made available upon project release.
