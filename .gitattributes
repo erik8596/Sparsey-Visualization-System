@@ -1,0 +1,4 @@
+# Exploratory analysis notebooks are supporting development artifacts.
+# Keep them in the repository, but exclude their large embedded outputs from
+# GitHub's language breakdown so it better reflects the application code.
+notebooks/*.ipynb -linguist-detectable
