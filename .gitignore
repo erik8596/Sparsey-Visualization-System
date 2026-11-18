@@ -12,7 +12,10 @@ __pycache__/
 
 # env
 .env
-.DS_Storevenv/
+.DS_Store
+
+# node.js dependencies
+node_modules/
 
 # development logs
 *.log
