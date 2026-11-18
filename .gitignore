@@ -14,6 +14,9 @@ __pycache__/
 .env
 .DS_Storevenv/
 
+# development logs
+*.log
+
 # local build
 sparsey_visualization_presentation.egg-info/
 sparseypy_svs.egg-info/
